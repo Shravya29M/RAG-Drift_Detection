@@ -25,12 +25,12 @@ DIM = 4
 
 
 def _meta(**kwargs: object) -> ChunkMetadata:
-    base = dict(
-        source="doc.txt",
-        source_type=SourceType.TEXT,
-        chunk_index=0,
-        ingested_at=datetime(2026, 1, 1),
-    )
+    base: dict[str, object] = {
+        "source": "doc.txt",
+        "source_type": SourceType.TEXT,
+        "chunk_index": 0,
+        "ingested_at": datetime(2026, 1, 1),
+    }
     base.update(kwargs)
     return ChunkMetadata(**base)  # type: ignore[arg-type]
 

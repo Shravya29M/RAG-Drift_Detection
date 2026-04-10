@@ -161,6 +161,121 @@ class VectorStoreConfig(BaseModel):
     )
 
 
+class GenerationConfig(BaseModel):
+    """Configuration for the generation layer.
+
+    Values correspond to the ``generation`` block in ``config/default.yaml``.
+    """
+
+    llm_provider: str = Field(
+        default="openai",
+        description="LLM backend: 'openai' or 'anthropic'.",
+    )
+    openai_model: str = Field(
+        default="gpt-4o",
+        description="OpenAI model identifier.",
+    )
+    anthropic_model: str = Field(
+        default="claude-opus-4-6",
+        description="Anthropic model identifier.",
+    )
+    max_tokens: PositiveInt = Field(
+        default=1024,
+        description="Maximum tokens to generate.",
+    )
+    temperature: float = Field(
+        default=0.2,
+        ge=0.0,
+        le=2.0,
+        description="Sampling temperature.",
+    )
+    prompt_template: str = Field(
+        default=(
+            "You are a helpful assistant. Answer the question using ONLY the context "
+            "provided below. If the context does not contain the answer, respond with "
+            "'No information found.'\n\n"
+            "Context:\n{context}\n\n"
+            "Question: {query}\n\n"
+            "Answer:"
+        ),
+        description="Prompt template. Must contain '{context}' and '{query}' placeholders.",
+    )
+    no_hit_response: str = Field(
+        default="No information found.",
+        description="Verbatim response when no relevant chunk is retrieved.",
+    )
+
+
+class AlarmConfig(BaseModel):
+    """Configuration for the drift alarm manager."""
+
+    webhook_url: str = Field(
+        default="",
+        description="HTTP(S) URL to POST hard-alert payloads to. Empty string disables.",
+    )
+    webhook_timeout_s: float = Field(
+        default=5.0,
+        gt=0.0,
+        description="Seconds before the webhook POST times out.",
+    )
+
+
+class DriftConfig(BaseModel):
+    """Configuration for the drift detection module.
+
+    Values correspond to the ``drift`` block in ``config/default.yaml``.
+    """
+
+    window_size: PositiveInt = Field(
+        default=50,
+        description="Number of query embeddings per drift evaluation window.",
+    )
+    pca_components: PositiveInt = Field(
+        default=32,
+        description="Number of PCA dimensions to reduce to before the KS test.",
+    )
+    threshold_alpha: float = Field(
+        default=0.05,
+        gt=0.0,
+        lt=1.0,
+        description="KS statistic threshold above which a soft alert is raised.",
+    )
+    hysteresis_windows: PositiveInt = Field(
+        default=3,
+        description="Consecutive alert windows required before triggering re-index.",
+    )
+    method: str = Field(
+        default="ks",
+        description="Detection method: 'ks' (KS test per PCA dimension, max stat).",
+    )
+
+
+class DriftResult(BaseModel):
+    """Result of a single drift evaluation window."""
+
+    statistic: float = Field(
+        description="KS test statistic (max across PCA dimensions).",
+    )
+    pvalue: float = Field(
+        description="p-value corresponding to the max-statistic dimension.",
+    )
+    drifted: bool = Field(
+        description="True when statistic exceeds DriftConfig.threshold_alpha.",
+    )
+    window_size: int = Field(
+        ge=1,
+        description="Number of query embeddings in this window.",
+    )
+    snapshot_size: int = Field(
+        ge=1,
+        description="Number of chunk embeddings in the reference snapshot.",
+    )
+    evaluated_at: datetime = Field(
+        default_factory=datetime.utcnow,
+        description="UTC timestamp of this evaluation.",
+    )
+
+
 class EmbeddingConfig(BaseModel):
     """Configuration for the embedding layer.
 

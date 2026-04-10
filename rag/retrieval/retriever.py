@@ -7,7 +7,7 @@ import time
 import numpy as np
 
 from rag.embedding.encoder import Encoder
-from rag.models import Chunk, RetrievalResult, SearchResult
+from rag.models import RetrievalResult, SearchResult
 from rag.vector_store.base import VectorStore
 
 # When filters are active we over-retrieve so filtering doesn't starve the
