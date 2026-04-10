@@ -92,6 +92,75 @@ class IngestConfig(BaseModel):
     )
 
 
+class SearchResult(BaseModel):
+    """A single result returned by :meth:`~rag.vector_store.base.VectorStore.search`.
+
+    Wraps the matched chunk together with its retrieval score and rank so
+    callers don't need to zip separate lists.
+    """
+
+    chunk: Chunk = Field(description="The matched chunk.")
+    score: float = Field(
+        description="Cosine similarity score (dot product of L2-normalised vectors).",
+    )
+    rank: int = Field(
+        ge=0,
+        description="0-based position in the result list (0 = most similar).",
+    )
+
+
+class RetrievalResult(BaseModel):
+    """Full result of a single retrieval call, including observability fields.
+
+    The generation layer uses ``chunks`` for prompt construction; the tracking
+    module logs ``scores``, ``latency_ms``, and ``total_candidates`` to W&B.
+    """
+
+    query: str = Field(description="Original query string.")
+    chunks: list[Chunk] = Field(description="Top-k chunks after filtering, ranked by score.")
+    scores: list[float] = Field(
+        description="Cosine similarity scores parallel to ``chunks``.",
+    )
+    latency_ms: float = Field(
+        ge=0.0,
+        description="Wall-clock retrieval time in milliseconds.",
+    )
+    total_candidates: int = Field(
+        ge=0,
+        description="Raw search result count before metadata filtering.",
+    )
+
+
+class VectorStoreConfig(BaseModel):
+    """Configuration for the vector store layer.
+
+    Values correspond to the ``vector_store`` block in ``config/default.yaml``.
+    """
+
+    backend: str = Field(
+        default="faiss",
+        description="Which backend to use: 'faiss' (local) or 'qdrant' (prod).",
+    )
+    faiss_index_path: Path = Field(
+        default=Path("index/faiss.index"),
+        description="Path where the FAISS index file is persisted.",
+    )
+    qdrant_url: str = Field(
+        default="",
+        description="Qdrant server URL; overridden by env QDRANT_URL.",
+    )
+    top_k: PositiveInt = Field(
+        default=5,
+        description="Default number of nearest neighbours to retrieve.",
+    )
+    score_threshold: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Minimum cosine similarity score to include a hit.",
+    )
+
+
 class EmbeddingConfig(BaseModel):
     """Configuration for the embedding layer.
 

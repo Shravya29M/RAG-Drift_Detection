@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -9,21 +10,18 @@ import pytest
 
 from rag.embedding.encoder import Encoder, SentenceTransformerEncoder, _l2_normalize
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture
-def mock_st(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+def mock_st(monkeypatch: pytest.MonkeyPatch) -> Generator[MagicMock, None, None]:
     """Patch SentenceTransformer so no model is downloaded during tests."""
     with patch("rag.embedding.encoder.SentenceTransformer") as MockST:
         instance = MockST.return_value
         # Default: return two unnormalised vectors
-        instance.encode.return_value = np.array(
-            [[3.0, 4.0], [1.0, 0.0]], dtype=np.float32
-        )
+        instance.encode.return_value = np.array([[3.0, 4.0], [1.0, 0.0]], dtype=np.float32)
         yield instance
 
 
