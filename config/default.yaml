@@ -1,0 +1,53 @@
+# All tunables for the RAG-drift pipeline. Loaded once at startup into Settings.
+
+ingestion:
+  chunk_size: 512          # tokens per chunk
+  chunk_overlap: 64        # sliding window overlap
+  supported_extensions: [".pdf", ".md", ".txt"]
+
+embedding:
+  default_model: "sentence-transformers/all-MiniLM-L6-v2"
+  openai_model: "text-embedding-ada-002"
+  batch_size: 64
+  cache_dir: ".cache/embeddings"
+
+vector_store:
+  backend: "faiss"         # "faiss" | "qdrant"
+  faiss_index_path: "index/faiss.index"
+  qdrant_url: ""           # overridden by env QDRANT_URL
+  top_k: 5
+  score_threshold: 0.0     # min cosine score to include a hit
+
+retrieval:
+  top_k: 5
+  rerank: false            # enable cross-encoder re-ranking
+  rerank_model: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+  no_hit_threshold: 0.3    # below this score → "no information found"
+
+generation:
+  llm_provider: "openai"   # "openai" | "anthropic"
+  openai_model: "gpt-4o"
+  anthropic_model: "claude-opus-4-6"
+  max_tokens: 1024
+  temperature: 0.2
+  stream: true
+
+drift:
+  window_size: 50          # queries per drift evaluation window
+  pca_components: 32       # dimensionality before KS/MMD test
+  threshold_alpha: 0.05    # p-value threshold for KS test
+  mmd_threshold: 0.01      # MMD statistic threshold
+  hysteresis_windows: 3    # consecutive alert windows before re-index
+  method: "ks"             # "ks" | "mmd"
+
+scheduler:
+  drift_check_interval_seconds: 300
+  reindex_cooldown_seconds: 3600
+
+logging:
+  level: "INFO"
+  format: "json"
+
+wandb:
+  project: "rag-drift"
+  entity: ""               # leave blank to use default W&B entity
