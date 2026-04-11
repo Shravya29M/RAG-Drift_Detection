@@ -1,6 +1,11 @@
 # RAG Drift Detection
 
-Most RAG portfolios stop at initial deployment. This one monitors what happens afterward. The system ingests documents, builds a FAISS vector index, and answers natural-language queries by retrieving relevant chunks and passing them to an LLM. A background drift monitor continuously compares the distribution of live query embeddings against the indexed knowledge using a PCA-projected two-sample KS test. When consecutive windows breach the threshold — hysteresis prevents noise-triggered alerts — the system fires a tiered alarm (log → webhook → callback) and optionally re-indexes automatically, restoring retrieval quality without human intervention.
+ Most RAG portfolio projects stop right after deployment. This one focuses on what happens after it goes live.
+ 
+It starts like a typical pipeline. Documents are ingested, a FAISS vector index is built, and user queries are answered by retrieving the most relevant chunks and passing them to an LLM.
+The difference is that it does not assume things will keep working well over time. In the background, a drift monitor keeps track of how incoming queries evolve. It compares the distribution of new query embeddings with what the system originally indexed, using a PCA projection and a two-sample KS test.
+
+If the system detects consistent drift across multiple windows, with hysteresis to avoid false alarms, it triggers alerts in stages. It starts with logs and can escalate to webhooks or callbacks if needed. It can also automatically trigger re-indexing, allowing the system to adapt on its own and maintain retrieval quality without constant manual intervention.
 
 ---
 
