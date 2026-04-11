@@ -1,4 +1,4 @@
-"""Abstract LLMRouter interface and OpenAI/Anthropic concrete implementations."""
+"""Abstract LLMRouter interface and OpenAI/Anthropic/Groq concrete implementations."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import os
 from abc import ABC, abstractmethod
 
 import anthropic
+import groq as groq_sdk
 from openai import OpenAI
 
 from rag.models import GenerationConfig
@@ -100,3 +101,63 @@ class AnthropicRouter(LLMRouter):
             if isinstance(block, anthropic.types.TextBlock):
                 return block.text
         return ""
+
+
+class GroqRouter(LLMRouter):
+    """LLMRouter backed by the Groq Chat Completions API.
+
+    API key is read from the ``GROQ_API_KEY`` environment variable.
+
+    Args:
+        config: Generation config supplying model name, temperature, and
+            max_tokens.  ``config.groq_model`` selects the model
+            (default: ``llama-3.3-70b-versatile``).
+    """
+
+    def __init__(self, config: GenerationConfig) -> None:
+        api_key = os.environ.get("GROQ_API_KEY", "")
+        self._client = groq_sdk.Groq(api_key=api_key)
+        self._config = config
+
+    def complete(self, prompt: str) -> str:
+        """Call the Groq Chat Completions API with *prompt* as the user message.
+
+        Args:
+            prompt: Rendered prompt string.
+
+        Returns:
+            Completion text; empty string when the model returns no content.
+        """
+        response = self._client.chat.completions.create(
+            model=self._config.groq_model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=self._config.temperature,
+            max_tokens=self._config.max_tokens,
+        )
+        content = response.choices[0].message.content
+        return content if content is not None else ""
+
+
+def make_router(config: GenerationConfig) -> LLMRouter:
+    """Instantiate the appropriate :class:`LLMRouter` based on available env vars.
+
+    Selection priority:
+
+    1. ``OPENAI_API_KEY`` is set → :class:`OpenAIRouter`
+    2. ``GROQ_API_KEY`` is set (and ``OPENAI_API_KEY`` is not) → :class:`GroqRouter`
+    3. ``ANTHROPIC_API_KEY`` is set → :class:`AnthropicRouter`
+    4. Fall back to :class:`OpenAIRouter` (will fail at call time if key is absent)
+
+    Args:
+        config: Generation configuration forwarded to the chosen router.
+
+    Returns:
+        A concrete :class:`LLMRouter` instance.
+    """
+    if os.environ.get("OPENAI_API_KEY"):
+        return OpenAIRouter(config)
+    if os.environ.get("GROQ_API_KEY"):
+        return GroqRouter(config)
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return AnthropicRouter(config)
+    return OpenAIRouter(config)

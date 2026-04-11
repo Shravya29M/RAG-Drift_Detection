@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import anthropic
 import pytest
 
-from rag.generation.llm import AnthropicRouter, LLMRouter, OpenAIRouter
+from rag.generation.llm import AnthropicRouter, GroqRouter, LLMRouter, OpenAIRouter, make_router
 from rag.generation.prompt import build_prompt
 from rag.models import Chunk, ChunkMetadata, GenerationConfig, SourceType
 
@@ -283,3 +283,114 @@ class TestAnthropicRouter:
         with patch("rag.generation.llm.anthropic.Anthropic", side_effect=fake_client):
             AnthropicRouter(_cfg())
         assert captured[0] == "anth-key-xyz"
+
+
+# ---------------------------------------------------------------------------
+# GroqRouter
+# ---------------------------------------------------------------------------
+
+
+class TestGroqRouter:
+    def test_complete_returns_content(self) -> None:
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content="groq answer"))]
+        )
+        with patch("rag.generation.llm.groq_sdk.Groq", return_value=mock_client):
+            router = GroqRouter(_cfg())
+        assert router.complete("p") == "groq answer"
+
+    def test_uses_groq_model_from_config(self) -> None:
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content="ok"))]
+        )
+        with patch("rag.generation.llm.groq_sdk.Groq", return_value=mock_client):
+            router = GroqRouter(_cfg(groq_model="llama-3.3-70b-versatile"))
+            router.complete("p")
+        kwargs = mock_client.chat.completions.create.call_args[1]
+        assert kwargs["model"] == "llama-3.3-70b-versatile"
+
+    def test_none_content_returns_empty_string(self) -> None:
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content=None))]
+        )
+        with patch("rag.generation.llm.groq_sdk.Groq", return_value=mock_client):
+            router = GroqRouter(_cfg())
+        assert router.complete("p") == ""
+
+    def test_api_key_read_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("GROQ_API_KEY", "gsk-test-key")
+        captured: list[str] = []
+
+        def fake_client(*, api_key: str) -> MagicMock:
+            captured.append(api_key)
+            return MagicMock()
+
+        with patch("rag.generation.llm.groq_sdk.Groq", side_effect=fake_client):
+            GroqRouter(_cfg())
+        assert captured[0] == "gsk-test-key"
+
+    def test_passes_temperature_and_max_tokens(self) -> None:
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content="ok"))]
+        )
+        with patch("rag.generation.llm.groq_sdk.Groq", return_value=mock_client):
+            router = GroqRouter(_cfg(temperature=0.1, max_tokens=512))
+            router.complete("p")
+        kwargs = mock_client.chat.completions.create.call_args[1]
+        assert kwargs["temperature"] == pytest.approx(0.1)
+        assert kwargs["max_tokens"] == 512
+
+
+# ---------------------------------------------------------------------------
+# make_router factory
+# ---------------------------------------------------------------------------
+
+
+class TestMakeRouter:
+    def test_openai_key_returns_openai_router(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        with patch("rag.generation.llm.OpenAI"):
+            router = make_router(_cfg())
+        assert isinstance(router, OpenAIRouter)
+
+    def test_groq_key_without_openai_returns_groq_router(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        with patch("rag.generation.llm.groq_sdk.Groq"):
+            router = make_router(_cfg())
+        assert isinstance(router, GroqRouter)
+
+    def test_openai_key_takes_priority_over_groq(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+        monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        with patch("rag.generation.llm.OpenAI"):
+            router = make_router(_cfg())
+        assert isinstance(router, OpenAIRouter)
+
+    def test_anthropic_key_only_returns_anthropic_router(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "anth-test")
+        with patch("rag.generation.llm.anthropic.Anthropic"):
+            router = make_router(_cfg())
+        assert isinstance(router, AnthropicRouter)
+
+    def test_no_keys_falls_back_to_openai_router(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        with patch("rag.generation.llm.OpenAI"):
+            router = make_router(_cfg())
+        assert isinstance(router, OpenAIRouter)

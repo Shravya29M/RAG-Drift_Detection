@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import tempfile
 import uuid
 from collections.abc import AsyncGenerator
@@ -20,8 +21,8 @@ from rag.drift.alarm import DriftAlarm
 from rag.drift.detector import DriftDetector
 from rag.drift.scheduler import DriftScheduler
 from rag.drift.snapshot import DistributionSnapshot
-from rag.embedding.encoder import Encoder
-from rag.generation.llm import LLMRouter
+from rag.embedding.encoder import Encoder, SentenceTransformerEncoder
+from rag.generation.llm import LLMRouter, make_router
 from rag.generation.prompt import build_prompt
 from rag.ingestion.chunker import chunk_text
 from rag.ingestion.metadata import infer_source_type
@@ -31,6 +32,7 @@ from rag.models import (
     Chunk,
     DriftConfig,
     DriftStatus,
+    EmbeddingConfig,
     GenerationConfig,
     IngestConfig,
     IngestResponse,
@@ -39,9 +41,11 @@ from rag.models import (
     QueryRequest,
     QueryResponse,
     SourceType,
+    VectorStoreConfig,
 )
 from rag.retrieval.retriever import Retriever
 from rag.vector_store.base import VectorStore
+from rag.vector_store.faiss_store import FAISSStore
 
 # ---------------------------------------------------------------------------
 # Application state container
@@ -74,8 +78,43 @@ class AppState:
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Shutdown the drift scheduler (if running) on app teardown."""
+    """Initialise service dependencies on startup; shut down on teardown.
+
+    Skips initialisation if ``app.state.app`` is already set (e.g. in tests).
+    """
+    logging.info("lifespan: started")
+    if getattr(app.state, "app", None) is None:
+        logging.info("lifespan: initializing")
+        try:
+            embedding_cfg = EmbeddingConfig()
+            vs_cfg = VectorStoreConfig()
+            generation_cfg = GenerationConfig()
+            ingest_cfg = IngestConfig()
+            drift_cfg = DriftConfig()
+
+            encoder = SentenceTransformerEncoder(
+                embedding_cfg.model_name, batch_size=embedding_cfg.batch_size
+            )
+            store = FAISSStore(dim=384, config=vs_cfg)
+            retriever = Retriever(store, encoder, score_threshold=vs_cfg.score_threshold)
+            router = make_router(generation_cfg)
+
+            app.state.app = AppState(
+                encoder=encoder,
+                store=store,
+                retriever=retriever,
+                llm_router=router,
+                generation_config=generation_cfg,
+                ingest_config=ingest_cfg,
+                drift_config=drift_cfg,
+            )
+            logging.info("lifespan: complete")
+        except Exception as e:
+            logging.exception(e)
+            raise
+
     yield
+
     state: AppState | None = getattr(app.state, "app", None)
     if state is not None and state.drift_scheduler is not None:
         state.drift_scheduler.shutdown(wait=False)

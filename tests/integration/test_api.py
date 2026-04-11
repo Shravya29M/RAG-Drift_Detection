@@ -323,9 +323,9 @@ class TestMetrics:
 
 class TestUninitialised:
     def test_query_returns_503_when_no_state(self) -> None:
-        app.state.app = None
+        app.state.app = _make_state()  # ensure lifespan guard skips init
         with TestClient(app) as c:
+            app.state.app = None  # clear after lifespan startup has run
             r = c.post("/query", json={"query": "hello"})
         assert r.status_code == 503
-        # Restore for other tests
         app.state.app = _make_state()

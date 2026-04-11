@@ -169,7 +169,7 @@ class GenerationConfig(BaseModel):
 
     llm_provider: str = Field(
         default="openai",
-        description="LLM backend: 'openai' or 'anthropic'.",
+        description="LLM backend: 'openai', 'anthropic', or 'groq'.",
     )
     openai_model: str = Field(
         default="gpt-4o",
@@ -178,6 +178,10 @@ class GenerationConfig(BaseModel):
     anthropic_model: str = Field(
         default="claude-opus-4-6",
         description="Anthropic model identifier.",
+    )
+    groq_model: str = Field(
+        default="llama-3.3-70b-versatile",
+        description="Groq model identifier.",
     )
     max_tokens: PositiveInt = Field(
         default=1024,

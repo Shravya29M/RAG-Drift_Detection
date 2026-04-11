@@ -12,8 +12,7 @@ services:
       - ./data:/app/data
       - ./index:/app/index
     depends_on:
-      qdrant:
-        condition: service_healthy
+      - qdrant
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
       interval: 10s
@@ -28,12 +27,6 @@ services:
       - "6333:6333"
     volumes:
       - qdrant_data:/qdrant/storage
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
-      interval: 10s
-      timeout: 5s
-      start_period: 10s
-      retries: 5
     restart: unless-stopped
 
 volumes:
