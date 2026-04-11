@@ -294,3 +294,64 @@ class EmbeddingConfig(BaseModel):
         default=None,
         description="Directory for caching encoded embeddings. None disables the cache.",
     )
+
+
+class JobStatusEnum(StrEnum):
+    """Lifecycle state of an async background job."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    DONE = "done"
+    ERROR = "error"
+
+
+class JobStatus(BaseModel):
+    """Status record for an async ingest or re-index job."""
+
+    job_id: str = Field(description="Unique job identifier (UUID4).")
+    status: JobStatusEnum = Field(description="Current lifecycle state.")
+    created_at: datetime = Field(description="UTC timestamp when the job was created.")
+    completed_at: datetime | None = Field(
+        default=None,
+        description="UTC timestamp when the job finished (done or error).",
+    )
+    error: str | None = Field(
+        default=None,
+        description="Error message if status is 'error'; None otherwise.",
+    )
+
+
+class QueryRequest(BaseModel):
+    """Request body for POST /query."""
+
+    query: str = Field(min_length=1, description="Natural-language query string.")
+    k: int = Field(default=5, ge=1, le=50, description="Number of chunks to retrieve.")
+    filters: dict[str, object] | None = Field(
+        default=None,
+        description="Optional ChunkMetadata field filters (AND semantics).",
+    )
+
+
+class QueryResponse(BaseModel):
+    """Response body for POST /query."""
+
+    answer: str = Field(description="LLM-generated answer.")
+    chunks: list[Chunk] = Field(description="Retrieved source chunks used for generation.")
+    scores: list[float] = Field(description="Cosine similarity scores parallel to chunks.")
+    latency_ms: float = Field(ge=0.0, description="End-to-end query latency in milliseconds.")
+
+
+class DriftStatus(BaseModel):
+    """Response body for GET /drift."""
+
+    history: list[DriftResult] = Field(description="Drift evaluation results, oldest first.")
+    consecutive_alerts: int = Field(ge=0, description="Current run of consecutive drifted windows.")
+    reindex_triggered: bool = Field(description="True if hysteresis threshold has been reached.")
+    buffer_size: int = Field(ge=0, description="Number of query embeddings in the current window.")
+
+
+class IngestResponse(BaseModel):
+    """Response body for POST /ingest."""
+
+    job_id: str = Field(description="Background job identifier; poll GET /jobs/{job_id}.")
+    message: str = Field(description="Human-readable status message.")

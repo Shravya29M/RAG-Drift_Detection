@@ -84,3 +84,12 @@ class VectorStore(ABC):
             embeddings: Float32 array of shape ``(len(chunks), dim)``; rows
                 must already be L2-normalised.
         """
+
+    @abstractmethod
+    def list_chunks(self) -> list[Chunk]:
+        """Return all chunks currently stored in the active index slot.
+
+        Returns:
+            List of :class:`~rag.models.Chunk` objects in unspecified order.
+            Empty list if the store has no chunks.
+        """

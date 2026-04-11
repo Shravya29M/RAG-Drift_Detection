@@ -221,6 +221,11 @@ class FAISSStore(VectorStore):
                 return np.empty((0, self._dim), dtype=np.float32)
             return np.stack(list(slot.vectors.values()), axis=0)
 
+    def list_chunks(self) -> list[Chunk]:
+        """Return all chunks in the active slot, in unspecified order."""
+        with self._lock:
+            return list(self._slot.chunks.values())
+
     def swap_index(self, chunks: list[Chunk], embeddings: np.ndarray) -> None:
         """Atomically replace the entire index.
 
