@@ -1,0 +1,112 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  padding: 20px;
+  gap: 16px;
+}
+
+.dropzone {
+  border: 1px dashed var(--border);
+  padding: 40px 20px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  user-select: none;
+}
+
+.dropzone:hover {
+  border-color: var(--green);
+  background: #0d1a10;
+}
+
+.dragging {
+  border-color: var(--green);
+  background: #0d1a10;
+}
+
+.dzInner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.dzIcon {
+  color: var(--green);
+  font-size: 24px;
+  letter-spacing: 4px;
+}
+
+.dzText {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.dzSub {
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+}
+
+.jobs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.jobsLabel {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+
+.job {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  padding: 6px 10px;
+  flex-wrap: wrap;
+}
+
+.jobFile {
+  flex: 1;
+  color: var(--amber);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jobId {
+  color: var(--text-dim);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.jobStatus {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.blink {
+  animation: blink 1s step-end infinite;
+  color: var(--green);
+  font-size: 10px;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+.jobError {
+  width: 100%;
+  color: var(--red);
+  font-size: 11px;
+  padding-top: 2px;
+}

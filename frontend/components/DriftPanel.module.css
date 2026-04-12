@@ -1,0 +1,68 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  padding: 20px;
+  gap: 16px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  padding: 8px 14px;
+  min-width: 130px;
+}
+
+.statLabel {
+  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
+.statVal {
+  color: var(--text);
+  font-size: 16px;
+}
+
+.chartBox {
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.chartLabel {
+  color: var(--text-dim);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.chart {
+  padding: 12px 14px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--green);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+.error {
+  color: var(--red);
+  font-size: 12px;
+  border-left: 2px solid var(--red);
+  padding-left: 10px;
+}

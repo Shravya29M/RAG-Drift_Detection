@@ -1,0 +1,154 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  padding: 16px 20px;
+  gap: 16px;
+}
+
+.promptRow {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  padding: 6px 10px;
+}
+
+.prompt {
+  color: var(--green);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.input {
+  flex: 1;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  caret-color: var(--green);
+}
+
+.run {
+  border: none;
+  border-left: 1px solid var(--border);
+  padding: 0 12px;
+  color: var(--amber);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+}
+
+.run:hover {
+  color: var(--green);
+  border-color: var(--border);
+}
+
+.run:disabled {
+  color: var(--dim);
+  cursor: default;
+}
+
+.error {
+  color: var(--red);
+  font-size: 12px;
+  border-left: 2px solid var(--red);
+  padding-left: 10px;
+}
+
+.answer {
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.answerLabel {
+  color: var(--text-dim);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.answerText {
+  padding: 12px 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.cursor {
+  animation: blink 1s step-end infinite;
+  color: var(--green);
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+.meta {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.sources {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sourcesLabel {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+
+.chunk {
+  border: 1px solid var(--border);
+}
+
+.chunkHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  padding: 6px 10px;
+  text-align: left;
+  background: var(--bg-panel);
+  color: var(--text);
+}
+
+.chunkHeader:hover {
+  background: var(--bg-raised);
+  border-color: transparent;
+  color: var(--text);
+}
+
+.chunkToggle {
+  color: var(--dim);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.chunkSource {
+  color: var(--amber);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chunkMeta {
+  color: var(--text-dim);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.chunkText {
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
