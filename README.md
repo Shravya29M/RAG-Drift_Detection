@@ -122,6 +122,3 @@ Evaluated on 50 ground-truth (query, relevant document) pairs from the test corp
 
 ---
 
-## What I'd do differently
-
-The main thing I'd change is the embedding model loading. Right now `SentenceTransformerEncoder` downloads and initialises the model on construction, which means the first API request after a cold start has multi-second latency and the Docker image has no pre-baked weights — they're fetched at runtime. In a production setting I'd bake the weights into the image layer during the builder stage (`RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('...')"`) and expose a startup readiness probe that only passes once the model is warm. I'd also replace the in-process `queue.Queue` + APScheduler pattern with a proper task queue (Celery + Redis or ARQ) so ingest and drift-check jobs survive process restarts and can be scaled horizontally without losing work. Finally, the SQLite drift history is fine for a single-node demo but would need to be replaced with Postgres if multiple API replicas are running, since WAL mode doesn't help across separate processes on separate hosts.
