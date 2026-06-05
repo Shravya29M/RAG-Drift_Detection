@@ -118,7 +118,6 @@ Evaluated on 50 ground-truth (query, relevant document) pairs from the test corp
 | Drift detection latency (queries) | — | n/a | n/a |
 | False positive rate (control set) | — | n/a | n/a |
 
-*Placeholders — run `notebooks/walkthrough.ipynb` to populate.*
 
 ---
 
