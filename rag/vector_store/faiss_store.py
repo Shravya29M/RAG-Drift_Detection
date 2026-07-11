@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import faiss  # type: ignore[import-untyped]  # faiss has no py.typed marker or stubs
+import faiss  # faiss has no py.typed marker or stubs; ignored via pyproject.toml override
 import numpy as np
 
 from rag.models import Chunk, SearchResult, VectorStoreConfig

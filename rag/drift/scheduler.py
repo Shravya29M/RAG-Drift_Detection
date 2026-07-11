@@ -6,8 +6,8 @@ import queue
 import threading
 
 import numpy as np
-from apscheduler.schedulers.background import BackgroundScheduler  # type: ignore[import-untyped]
-from apscheduler.triggers.interval import IntervalTrigger  # type: ignore[import-untyped]
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.interval import IntervalTrigger
 
 from rag.drift.alarm import AlarmLevel, DriftAlarm
 from rag.drift.detector import DriftDetector

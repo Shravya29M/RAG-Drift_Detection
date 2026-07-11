@@ -6,7 +6,7 @@ import re
 from html.parser import HTMLParser
 from pathlib import Path
 
-import fitz  # type: ignore[import-untyped]  # PyMuPDF's fitz re-export has no py.typed marker
+import fitz  # PyMuPDF's fitz re-export has no py.typed marker; ignored via pyproject.toml override
 import httpx
 
 from rag.models import SourceType
