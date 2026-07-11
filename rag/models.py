@@ -210,6 +210,16 @@ class GenerationConfig(BaseModel):
     )
 
 
+class SchedulerConfig(BaseModel):
+    """Configuration for the background drift-check scheduler."""
+
+    drift_check_interval_seconds: float = Field(
+        default=30.0,
+        gt=0.0,
+        description="How often the background job drains the query-embedding queue.",
+    )
+
+
 class AlarmConfig(BaseModel):
     """Configuration for the drift alarm manager."""
 
@@ -242,7 +252,10 @@ class DriftConfig(BaseModel):
         default=0.05,
         gt=0.0,
         lt=1.0,
-        description="KS statistic threshold above which a soft alert is raised.",
+        description=(
+            "Significance level for the KS test; a window drifts when the "
+            "Bonferroni-corrected p-value falls below alpha / pca_components."
+        ),
     )
     hysteresis_windows: PositiveInt = Field(
         default=3,
@@ -264,7 +277,10 @@ class DriftResult(BaseModel):
         description="p-value corresponding to the max-statistic dimension.",
     )
     drifted: bool = Field(
-        description="True when statistic exceeds DriftConfig.threshold_alpha.",
+        description=(
+            "True when the p-value falls below the Bonferroni-corrected "
+            "significance level (threshold_alpha / n_components)."
+        ),
     )
     window_size: int = Field(
         ge=1,
@@ -352,6 +368,14 @@ class DriftStatus(BaseModel):
     consecutive_alerts: int = Field(ge=0, description="Current run of consecutive drifted windows.")
     reindex_triggered: bool = Field(description="True if hysteresis threshold has been reached.")
     buffer_size: int = Field(ge=0, description="Number of query embeddings in the current window.")
+    baseline_ready: bool = Field(
+        default=False,
+        description="True once the calibration window of query embeddings has been captured.",
+    )
+    monitor_running: bool = Field(
+        default=False,
+        description="True while the background drift scheduler is active.",
+    )
 
 
 class IngestResponse(BaseModel):

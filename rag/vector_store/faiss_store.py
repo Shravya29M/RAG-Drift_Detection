@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import os
 import threading
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import faiss  # type: ignore[import-untyped]  # faiss has no py.typed marker or stubs
@@ -129,6 +132,11 @@ class FAISSStore(VectorStore):
 
         with self._lock:
             slot = self._slot
+            # Re-ingesting a document produces the same chunk IDs; drop the
+            # stale vectors first so the index never holds duplicates.
+            stale = [cid for cid in (c.id for c in chunks) if cid in slot.id_map]
+            if stale:
+                self.delete(stale)
             int_ids = np.arange(
                 slot.next_id,
                 slot.next_id + len(chunks),
@@ -164,6 +172,9 @@ class FAISSStore(VectorStore):
         if q.ndim == 1:
             q = q[np.newaxis, :]  # (1, dim)
 
+        # Capture the slot once so result hydration reads the same index
+        # generation that produced the integer IDs — a concurrent swap_index
+        # must never mix IDs from one slot with chunks from the other.
         with self._lock:
             slot = self._slot
             if slot.index.ntotal == 0:
@@ -171,23 +182,21 @@ class FAISSStore(VectorStore):
 
             k = min(top_k, slot.index.ntotal)
             raw_d, raw_i = slot.index.search(q, k)
+            distances: np.ndarray = np.asarray(raw_d[0])
+            indices: np.ndarray = np.asarray(raw_i[0])
 
-        distances: np.ndarray = np.asarray(raw_d[0])
-        indices: np.ndarray = np.asarray(raw_i[0])
-
-        results: list[SearchResult] = []
-        for rank, (score_val, fid) in enumerate(zip(distances, indices, strict=True)):
-            score = float(score_val)
-            iid = int(fid)
-            if iid == -1:  # FAISS sentinel for "no result"
-                continue
-            if score < score_threshold:
-                continue
-            with self._lock:
-                chunk = self._slot.chunks.get(iid)
-            if chunk is None:
-                continue
-            results.append(SearchResult(chunk=chunk, score=score, rank=rank))
+            results: list[SearchResult] = []
+            for rank, (score_val, fid) in enumerate(zip(distances, indices, strict=True)):
+                score = float(score_val)
+                iid = int(fid)
+                if iid == -1:  # FAISS sentinel for "no result"
+                    continue
+                if score < score_threshold:
+                    continue
+                chunk = slot.chunks.get(iid)
+                if chunk is None:
+                    continue
+                results.append(SearchResult(chunk=chunk, score=score, rank=rank))
 
         return results
 
@@ -244,3 +253,45 @@ class FAISSStore(VectorStore):
             inactive = 1 - self._active
             self._slots[inactive] = new_slot
             self._active = inactive
+
+    # ------------------------------------------------------------------
+    # Persistence
+    # ------------------------------------------------------------------
+
+    def save(self, path: Path) -> None:
+        """Persist all chunks and embeddings of the active slot to *path*.
+
+        Writes a single ``.npz`` archive (vectors + chunk JSON) atomically via
+        a temp file and rename, so a crash mid-write never corrupts an
+        existing snapshot.
+        """
+        with self._lock:
+            slot = self._slot
+            fids = sorted(slot.chunks)
+            chunks = [slot.chunks[fid] for fid in fids]
+            if fids:
+                vecs = np.stack([slot.vectors[fid] for fid in fids], axis=0)
+            else:
+                vecs = np.empty((0, self._dim), dtype=np.float32)
+
+        chunks_json = json.dumps([c.model_dump(mode="json") for c in chunks])
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + ".tmp")
+        with tmp.open("wb") as fh:
+            np.savez(fh, vectors=vecs, chunks_json=np.array(chunks_json))
+        os.replace(tmp, path)
+
+    def load(self, path: Path) -> bool:
+        """Load a snapshot written by :meth:`save` and swap it in atomically.
+
+        Returns:
+            ``True`` if a snapshot existed and was loaded, ``False`` otherwise.
+        """
+        if not path.exists():
+            return False
+        with np.load(path, allow_pickle=False) as data:
+            vecs = np.asarray(data["vectors"], dtype=np.float32)
+            raw = json.loads(str(data["chunks_json"]))
+        chunks = [Chunk.model_validate(obj) for obj in raw]
+        self.swap_index(chunks, vecs)
+        return True

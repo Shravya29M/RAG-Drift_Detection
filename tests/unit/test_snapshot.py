@@ -145,7 +145,7 @@ class TestCompareDistributions:
         assert not result.drifted
 
     def test_shifted_dist_flagged_as_drifted(self, snapshot: DistributionSnapshot) -> None:
-        """Hard drift should be flagged when statistic > threshold_alpha."""
+        """Hard drift should be flagged when the corrected p-value is significant."""
         snap = DistributionSnapshot(_same_dist_vecs(N_REF), _cfg(threshold_alpha=0.05))
         result = snap.compare(_shifted_dist_vecs(N_QUERY, shift=10.0))
         assert result.drifted
@@ -157,14 +157,31 @@ class TestCompareDistributions:
         assert stat_large > stat_small
 
     def test_drifted_flag_consistent_with_threshold(self) -> None:
-        """drifted == (statistic > threshold_alpha)."""
+        """drifted == (pvalue < threshold_alpha / n_components)."""
         ref = _same_dist_vecs(N_REF)
         for alpha in (0.05, 0.3, 0.7):
             snap = DistributionSnapshot(ref, _cfg(threshold_alpha=alpha))
             result = snap.compare(_shifted_dist_vecs(N_QUERY, shift=5.0))
-            assert result.drifted == (result.statistic > alpha)
+            assert result.drifted == (result.pvalue < alpha / snap.n_components)
 
     def test_single_query_vector_accepted(self, snapshot: DistributionSnapshot) -> None:
         """A window of size 1 is valid (edge case)."""
         result = snapshot.compare(_same_dist_vecs(1))
         assert isinstance(result, DriftResult)
+
+    def test_reference_override_used_for_comparison(self) -> None:
+        """An explicit reference replaces the chunk-embedding distribution."""
+        snap = DistributionSnapshot(_same_dist_vecs(N_REF), _cfg(threshold_alpha=0.05))
+        shifted = _shifted_dist_vecs(N_QUERY, shift=10.0)
+        # Window vs. itself as reference → identical distributions, no drift.
+        result = snap.compare(shifted, reference=shifted)
+        assert not result.drifted
+        assert result.snapshot_size == N_QUERY
+
+    def test_same_query_dist_vs_query_reference_not_drifted(self) -> None:
+        """Two windows from the same query distribution must not flag drift."""
+        snap = DistributionSnapshot(_same_dist_vecs(N_REF), _cfg(threshold_alpha=0.05))
+        baseline = _shifted_dist_vecs(N_QUERY, shift=3.0, seed=1)
+        window = _shifted_dist_vecs(N_QUERY, shift=3.0, seed=2)
+        result = snap.compare(window, reference=baseline)
+        assert not result.drifted

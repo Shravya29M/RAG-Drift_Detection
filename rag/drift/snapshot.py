@@ -25,6 +25,17 @@ class DistributionSnapshot:
 
     The max-statistic aggregation is deliberately conservative: it fires if
     *any* latent dimension drifts, which is what matters for retrieval quality.
+    Because ``n_components`` independent tests are run per window, the drift
+    decision applies a Bonferroni correction: a window is flagged as drifted
+    when the smallest per-dimension p-value falls below
+    ``threshold_alpha / n_components``.
+
+    The chunk embeddings define the PCA *basis* only.  The reference
+    *distribution* for the KS test should normally be a calibration window of
+    real query embeddings (passed via ``compare(..., reference=...)``), since
+    queries and document chunks occupy different regions of embedding space
+    even in a healthy system.  When no reference is given, the projected chunk
+    embeddings are used as a fallback.
 
     Args:
         embeddings: Float32 array of shape ``(n_chunks, dim)`` — the full set
@@ -88,16 +99,28 @@ class DistributionSnapshot:
         centered: np.ndarray = np.asarray(embeddings - self._ref_mean, dtype=np.float32)
         return np.asarray(centered @ self._components.T, dtype=np.float32)
 
-    def compare(self, query_embeddings: np.ndarray) -> DriftResult:
-        """Measure distributional shift between the snapshot and *query_embeddings*.
+    def compare(
+        self,
+        query_embeddings: np.ndarray,
+        *,
+        reference: np.ndarray | None = None,
+    ) -> DriftResult:
+        """Measure distributional shift between a reference and *query_embeddings*.
 
         Projects *query_embeddings* onto the reference PCA basis, then runs an
         independent two-sample KS test for each dimension.  Returns the maximum
         KS statistic (most-drifted dimension) with its associated p-value.
+        The window is flagged as drifted when that p-value falls below the
+        Bonferroni-corrected significance level
+        ``threshold_alpha / n_components``.
 
         Args:
             query_embeddings: Float32 array of shape ``(n_queries, dim)``.
                 Must have at least 1 row and the same ``dim`` as the snapshot.
+            reference: Optional raw embeddings of shape ``(n_ref, dim)`` to use
+                as the reference distribution (e.g. a calibration window of
+                query embeddings).  Falls back to the projected chunk
+                embeddings when ``None``.
 
         Returns:
             :class:`~rag.models.DriftResult` with ``statistic``, ``pvalue``,
@@ -114,13 +137,20 @@ class DistributionSnapshot:
                 f"snapshot dim {self._ref_mean.shape[0]}."
             )
 
+        if reference is not None:
+            ref_projected = self._project(reference)
+            ref_size = int(reference.shape[0])
+        else:
+            ref_projected = self._ref_projected
+            ref_size = self._n_ref
+
         query_proj: np.ndarray = self._project(query_embeddings)
 
         max_stat = 0.0
         pvalue_at_max = 1.0
 
         for dim_i in range(self.n_components):
-            ref_col: np.ndarray = np.asarray(self._ref_projected[:, dim_i])
+            ref_col: np.ndarray = np.asarray(ref_projected[:, dim_i])
             qry_col: np.ndarray = np.asarray(query_proj[:, dim_i])
             result = stats.ks_2samp(ref_col, qry_col)
             stat = float(result.statistic)
@@ -128,10 +158,11 @@ class DistributionSnapshot:
                 max_stat = stat
                 pvalue_at_max = float(result.pvalue)
 
+        corrected_alpha = self._config.threshold_alpha / self.n_components
         return DriftResult(
             statistic=max_stat,
             pvalue=pvalue_at_max,
-            drifted=max_stat > self._config.threshold_alpha,
+            drifted=pvalue_at_max < corrected_alpha,
             window_size=int(query_embeddings.shape[0]),
-            snapshot_size=self._n_ref,
+            snapshot_size=ref_size,
         )

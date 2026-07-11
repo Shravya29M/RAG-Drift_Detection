@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import queue
+import threading
 
 import numpy as np
 from apscheduler.schedulers.background import BackgroundScheduler  # type: ignore[import-untyped]
@@ -58,6 +59,9 @@ class DriftScheduler:
         self._embedding_queue: queue.Queue[np.ndarray] = queue.Queue()
         self._scheduler = BackgroundScheduler()
         self._job_id = "drift_check"
+        # Serialises detector access between the APScheduler tick thread and
+        # explicit process_now() callers — the detector is not thread-safe.
+        self._tick_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -105,6 +109,15 @@ class DriftScheduler:
         """
         self._embedding_queue.put(np.asarray(embedding, dtype=np.float32))
 
+    def process_now(self) -> None:
+        """Drain the queue immediately instead of waiting for the next tick.
+
+        Used by the drift-simulation endpoint so demo traffic is evaluated
+        synchronously.  Safe to call from any thread — a lock serialises
+        detector access with the scheduled tick.
+        """
+        self._tick()
+
     @property
     def queue_size(self) -> int:
         """Approximate number of embeddings waiting in the queue."""
@@ -128,15 +141,16 @@ class DriftScheduler:
         - ``AUTO`` when hysteresis threshold reached (``detector.reindex_triggered``)
         - ``SOFT`` for the first drifted window or a clean window
         """
-        while True:
-            try:
-                embedding = self._embedding_queue.get_nowait()
-            except queue.Empty:
-                break
+        with self._tick_lock:
+            while True:
+                try:
+                    embedding = self._embedding_queue.get_nowait()
+                except queue.Empty:
+                    break
 
-            result = self._detector.add_query_embedding(embedding)
-            if result is None:
-                continue
+                result = self._detector.add_query_embedding(embedding)
+                if result is None:
+                    continue
 
-            level = AlarmLevel.AUTO if self._detector.reindex_triggered else AlarmLevel.SOFT
-            self._alarm.fire(result, level)
+                level = AlarmLevel.AUTO if self._detector.reindex_triggered else AlarmLevel.SOFT
+                self._alarm.fire(result, level)

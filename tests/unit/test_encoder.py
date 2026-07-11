@@ -90,6 +90,10 @@ class TestEncoderABC:
 
     def test_concrete_subclass_is_valid(self) -> None:
         class Minimal(Encoder):
+            @property
+            def dim(self) -> int:
+                return 4
+
             def encode(self, texts: list[str]) -> np.ndarray:
                 return np.zeros((len(texts), 4), dtype=np.float32)
 

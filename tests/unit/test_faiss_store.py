@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -311,3 +312,73 @@ class TestThreadSafety:
             t.join()
 
         assert errors == [], f"Thread errors: {errors}"
+
+
+# ---------------------------------------------------------------------------
+# Duplicate-ID handling on re-ingest
+# ---------------------------------------------------------------------------
+
+
+class TestReAddDeduplication:
+    def test_re_adding_same_ids_does_not_grow_index(self) -> None:
+        store, chunks, vecs = _store("a", "b")
+        store.add(chunks, vecs)
+        assert len(store.list_chunks()) == 2
+
+    def test_re_add_updates_vector(self) -> None:
+        store, chunks, _ = _store("a")
+        new_vec = _random_unit_vecs(1, seed=99)
+        store.add(chunks, new_vec)
+        results = store.search(new_vec[0], top_k=1)
+        assert results[0].score == pytest.approx(1.0, abs=1e-5)
+
+    def test_re_add_no_duplicate_results(self) -> None:
+        store, chunks, vecs = _store("a")
+        store.add(chunks, vecs)
+        results = store.search(vecs[0], top_k=10)
+        assert len(results) == 1
+
+
+# ---------------------------------------------------------------------------
+# Persistence — save() / load()
+# ---------------------------------------------------------------------------
+
+
+class TestPersistence:
+    def test_save_then_load_roundtrip(self, tmp_path: Path) -> None:
+        store, chunks, vecs = _store("a", "b", "c")
+        path = tmp_path / "faiss.index"
+        store.save(path)
+
+        fresh = FAISSStore(dim=DIM)
+        assert fresh.load(path)
+        assert {c.id for c in fresh.list_chunks()} == {"a", "b", "c"}
+
+    def test_loaded_store_search_matches_original(self, tmp_path: Path) -> None:
+        store, chunks, vecs = _store("a", "b", "c")
+        path = tmp_path / "faiss.index"
+        store.save(path)
+        fresh = FAISSStore(dim=DIM)
+        fresh.load(path)
+        orig = store.search(vecs[0], top_k=1)[0]
+        loaded = fresh.search(vecs[0], top_k=1)[0]
+        assert loaded.chunk.id == orig.chunk.id
+        assert loaded.score == pytest.approx(orig.score, abs=1e-6)
+
+    def test_load_missing_file_returns_false(self, tmp_path: Path) -> None:
+        store = FAISSStore(dim=DIM)
+        assert not store.load(tmp_path / "missing.index")
+
+    def test_save_empty_store_roundtrip(self, tmp_path: Path) -> None:
+        store = FAISSStore(dim=DIM)
+        path = tmp_path / "faiss.index"
+        store.save(path)
+        fresh = FAISSStore(dim=DIM)
+        assert fresh.load(path)
+        assert fresh.list_chunks() == []
+
+    def test_save_leaves_no_tmp_file(self, tmp_path: Path) -> None:
+        store, _, _ = _store("a")
+        path = tmp_path / "faiss.index"
+        store.save(path)
+        assert not (tmp_path / "faiss.index.tmp").exists()

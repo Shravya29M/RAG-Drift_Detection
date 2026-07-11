@@ -5,11 +5,19 @@ import styles from './DriftPanel.module.css';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
+interface DriftWindow {
+  statistic: number;
+  pvalue: number;
+  drifted: boolean;
+}
+
 interface DriftStatus {
-  history: number[];
+  history: DriftWindow[];
   consecutive_alerts: number;
   buffer_size: number;
   reindex_triggered: boolean;
+  baseline_ready: boolean;
+  monitor_running: boolean;
 }
 
 const CHART_W = 60;
@@ -76,6 +84,7 @@ export function DriftPanel() {
   const [lastReindex, setLastReindex] = useState<string>('');
   const [reindexing, setReindexing] = useState(false);
   const [reindexError, setReindexError] = useState('');
+  const [simulating, setSimulating] = useState(false);
 
   async function poll() {
     try {
@@ -106,6 +115,20 @@ export function DriftPanel() {
     }
   }
 
+  async function simulateDrift() {
+    setSimulating(true);
+    setReindexError('');
+    try {
+      const res = await fetch(`${API}/drift/simulate?windows=3`, { method: 'POST' });
+      if (!res.ok) throw new Error(`${res.status}`);
+      poll();
+    } catch (e) {
+      setReindexError(String(e));
+    } finally {
+      setSimulating(false);
+    }
+  }
+
   async function resetDrift() {
     try {
       await fetch(`${API}/drift/reset`, { method: 'POST' });
@@ -115,7 +138,7 @@ export function DriftPanel() {
     }
   }
 
-  const chart = drift ? asciiChart(drift.history) : '(loading...)';
+  const chart = drift ? asciiChart(drift.history.map((h) => h.statistic)) : '(loading...)';
 
   return (
     <div className={styles.panel}>
@@ -132,6 +155,12 @@ export function DriftPanel() {
         <div className={styles.stat}>
           <span className={styles.statLabel}>buffer_size</span>
           <span className={styles.statVal}>{drift?.buffer_size ?? '—'}</span>
+        </div>
+        <div className={styles.stat}>
+          <span className={styles.statLabel}>baseline</span>
+          <span className={styles.statVal}>
+            {drift ? (drift.baseline_ready ? 'ready' : 'calibrating') : '—'}
+          </span>
         </div>
         <div className={styles.stat}>
           <span className={styles.statLabel}>reindex_triggered</span>
@@ -156,6 +185,9 @@ export function DriftPanel() {
       </div>
 
       <div className={styles.actions}>
+        <button onClick={simulateDrift} disabled={simulating}>
+          {simulating ? 'simulating...' : '> simulate drift'}
+        </button>
         <button onClick={triggerReindex} disabled={reindexing}>
           {reindexing ? 'reindexing...' : '> reindex'}
         </button>

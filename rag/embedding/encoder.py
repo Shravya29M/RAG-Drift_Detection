@@ -15,6 +15,11 @@ class Encoder(ABC):
     interface — never import a concrete implementation directly.
     """
 
+    @property
+    @abstractmethod
+    def dim(self) -> int:
+        """Dimensionality of the vectors produced by :meth:`encode`."""
+
     @abstractmethod
     def encode(self, texts: list[str]) -> np.ndarray:
         """Encode a batch of texts into L2-normalised dense vectors.
@@ -44,6 +49,11 @@ class SentenceTransformerEncoder(Encoder):
     def __init__(self, model_name: str, *, batch_size: int = 64) -> None:
         self._model = SentenceTransformer(model_name)
         self._batch_size = batch_size
+
+    @property
+    def dim(self) -> int:
+        """Embedding dimensionality reported by the underlying model."""
+        return int(self._model.get_sentence_embedding_dimension() or 0)
 
     def encode(self, texts: list[str]) -> np.ndarray:
         """Encode *texts* and return L2-normalised embeddings.

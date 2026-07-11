@@ -43,6 +43,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Copy application source.
 COPY rag/       ./rag/
 COPY config/    ./config/
+COPY samples/   ./samples/
 COPY pyproject.toml .
 
 # Directories mounted at runtime via docker-compose volumes;

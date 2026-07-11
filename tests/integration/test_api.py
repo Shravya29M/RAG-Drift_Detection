@@ -41,6 +41,10 @@ DIM = 8
 class _MockEncoder(Encoder):
     """Returns deterministic L2-normalised random vectors."""
 
+    @property
+    def dim(self) -> int:
+        return DIM
+
     def encode(self, texts: list[str]) -> np.ndarray:
         rng = np.random.default_rng(seed=len(texts))
         vecs = rng.random((len(texts), DIM)).astype(np.float32)
@@ -329,3 +333,14 @@ class TestUninitialised:
             r = c.post("/query", json={"query": "hello"})
         assert r.status_code == 503
         app.state.app = _make_state()
+
+
+# ---------------------------------------------------------------------------
+# POST /drift/simulate
+# ---------------------------------------------------------------------------
+
+
+class TestDriftSimulate:
+    def test_conflict_when_monitor_not_running(self, client: TestClient) -> None:
+        r = client.post("/drift/simulate")
+        assert r.status_code == 409

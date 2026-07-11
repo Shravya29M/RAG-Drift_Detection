@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-import logging
+import os
 import tempfile
 import uuid
 from collections.abc import AsyncGenerator
@@ -28,12 +28,12 @@ from rag.generation.prompt import build_prompt
 from rag.ingestion.chunker import chunk_text
 from rag.ingestion.metadata import infer_source_type
 from rag.ingestion.parsers import parse
+from rag.logging import get_logger
 from rag.models import (
     AlarmConfig,
     Chunk,
     DriftConfig,
     DriftStatus,
-    EmbeddingConfig,
     GenerationConfig,
     IngestConfig,
     IngestResponse,
@@ -42,11 +42,14 @@ from rag.models import (
     QueryRequest,
     QueryResponse,
     SourceType,
-    VectorStoreConfig,
 )
 from rag.retrieval.retriever import Retriever
+from rag.settings import load_settings
+from rag.tracking import log_event
 from rag.vector_store.base import VectorStore
 from rag.vector_store.faiss_store import FAISSStore
+
+logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Application state container
@@ -67,6 +70,9 @@ class AppState:
     generation_config: GenerationConfig
     ingest_config: IngestConfig
     drift_config: DriftConfig
+    alarm_config: AlarmConfig = field(default_factory=AlarmConfig)
+    drift_interval_s: float = 30.0
+    index_path: Path | None = None
     drift_detector: DriftDetector | None = None
     drift_scheduler: DriftScheduler | None = None
     jobs: dict[str, JobStatus] = field(default_factory=dict)
@@ -83,42 +89,51 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     Skips initialisation if ``app.state.app`` is already set (e.g. in tests).
     """
-    logging.info("lifespan: started")
+    logger.info("lifespan: started")
     if getattr(app.state, "app", None) is None:
-        logging.info("lifespan: initializing")
+        logger.info("lifespan: initializing")
         try:
-            embedding_cfg = EmbeddingConfig()
-            vs_cfg = VectorStoreConfig()
-            generation_cfg = GenerationConfig()
-            ingest_cfg = IngestConfig()
-            drift_cfg = DriftConfig()
+            settings = load_settings()
 
             encoder = SentenceTransformerEncoder(
-                embedding_cfg.model_name, batch_size=embedding_cfg.batch_size
+                settings.embedding.model_name, batch_size=settings.embedding.batch_size
             )
-            store = FAISSStore(dim=384, config=vs_cfg)
-            retriever = Retriever(store, encoder, score_threshold=vs_cfg.score_threshold)
-            router = make_router(generation_cfg)
+            store = FAISSStore(dim=encoder.dim, config=settings.vector_store)
+            retriever = Retriever(
+                store, encoder, score_threshold=settings.vector_store.score_threshold
+            )
+            router = make_router(settings.generation)
 
-            app.state.app = AppState(
+            state = AppState(
                 encoder=encoder,
                 store=store,
                 retriever=retriever,
                 llm_router=router,
-                generation_config=generation_cfg,
-                ingest_config=ingest_cfg,
-                drift_config=drift_cfg,
+                generation_config=settings.generation,
+                ingest_config=settings.ingestion,
+                drift_config=settings.drift,
+                alarm_config=settings.alarm,
+                drift_interval_s=settings.scheduler.drift_check_interval_seconds,
+                index_path=settings.vector_store.faiss_index_path,
             )
-            logging.info("lifespan: complete")
-        except Exception as e:
-            logging.exception(e)
+            app.state.app = state
+
+            if store.load(settings.vector_store.faiss_index_path):
+                logger.info("lifespan: restored index from disk")
+            elif os.environ.get("SEED_SAMPLE_DATA", "true").lower() == "true":
+                _seed_sample_data(state)
+
+            _start_drift_monitor(state)
+            logger.info("lifespan: complete")
+        except Exception:
+            logger.exception("lifespan: initialization failed")
             raise
 
     yield
 
-    state: AppState | None = getattr(app.state, "app", None)
-    if state is not None and state.drift_scheduler is not None:
-        state.drift_scheduler.shutdown(wait=False)
+    final_state: AppState | None = getattr(app.state, "app", None)
+    if final_state is not None and final_state.drift_scheduler is not None:
+        final_state.drift_scheduler.shutdown(wait=False)
 
 
 app = FastAPI(title="RAG Drift API", lifespan=_lifespan)
@@ -147,7 +162,69 @@ def get_state(request: Request) -> AppState:
     return state
 
 
-_StateT = Annotated[AppState, get_state]
+# ---------------------------------------------------------------------------
+# Drift monitor lifecycle
+# ---------------------------------------------------------------------------
+
+
+def _start_drift_monitor(state: AppState) -> None:
+    """(Re)build the drift detector + scheduler from the current index.
+
+    No-ops when the store holds fewer than 2 embeddings (nothing to snapshot).
+    An already-running scheduler is replaced and shut down.
+    """
+    snap_embs = state.store.snapshot_distribution()
+    if snap_embs.shape[0] < 2:
+        return
+
+    snapshot = DistributionSnapshot(snap_embs, state.drift_config)
+    detector = DriftDetector(snapshot, state.drift_config)
+    alarm = DriftAlarm(state.alarm_config, re_index_callback=lambda: _auto_reindex(state))
+    scheduler = DriftScheduler(
+        detector,
+        alarm,
+        state.drift_config,
+        drift_check_interval_s=state.drift_interval_s,
+    )
+
+    old = state.drift_scheduler
+    state.drift_detector = detector
+    state.drift_scheduler = scheduler
+    scheduler.start()
+    if old is not None:
+        old.shutdown(wait=False)
+    logger.info("drift monitor started")
+
+
+def _auto_reindex(state: AppState) -> None:
+    """AUTO-alarm callback: run a re-index as a tracked background job."""
+    logger.info("drift hysteresis reached — auto re-index triggered")
+    log_event("reindex", {"trigger": "auto_drift"})
+    job_id = _new_job(state)
+    _run_reindex(state, job_id)
+
+
+def _persist_index(state: AppState) -> None:
+    """Save the FAISS index to disk if persistence is configured."""
+    if state.index_path is not None and isinstance(state.store, FAISSStore):
+        state.store.save(state.index_path)
+
+
+def _seed_sample_data(state: AppState) -> None:
+    """Ingest the bundled sample documents so a fresh deployment isn't empty."""
+    samples_dir = Path(os.environ.get("SAMPLES_DIR", "samples"))
+    if not samples_dir.is_dir():
+        return
+    sources: list[tuple[str, SourceType]] = []
+    for p in sorted(samples_dir.iterdir()):
+        try:
+            sources.append((str(p), infer_source_type(p)))
+        except ValueError:
+            continue
+    if not sources:
+        return
+    logger.info("seeding index with %d sample document(s)", len(sources))
+    _run_ingest(state, _new_job(state), sources, state.ingest_config, [])
 
 
 # ---------------------------------------------------------------------------
@@ -186,6 +263,9 @@ def _run_ingest(
             texts = [c.text for c in all_chunks]
             embeddings = state.encoder.encode(texts)
             state.store.add(all_chunks, embeddings)
+            _persist_index(state)
+            if state.drift_scheduler is None:
+                _start_drift_monitor(state)
         state.jobs[job_id].status = JobStatusEnum.DONE
         state.jobs[job_id].completed_at = datetime.utcnow()
     except Exception as exc:  # noqa: BLE001
@@ -209,18 +289,8 @@ def _run_reindex(state: AppState, job_id: str) -> None:
         texts = [c.text for c in chunks]
         embeddings = state.encoder.encode(texts)
         state.store.swap_index(chunks, embeddings)
-
-        snap_embs = state.store.snapshot_distribution()
-        if snap_embs.shape[0] >= state.drift_config.pca_components:
-            snapshot = DistributionSnapshot(snap_embs, state.drift_config)
-            detector = DriftDetector(snapshot, state.drift_config)
-            alarm = DriftAlarm(AlarmConfig())
-            scheduler = DriftScheduler(detector, alarm, state.drift_config)
-            if state.drift_scheduler is not None:
-                state.drift_scheduler.shutdown(wait=False)
-            state.drift_detector = detector
-            state.drift_scheduler = scheduler
-            state.drift_scheduler.start()
+        _persist_index(state)
+        _start_drift_monitor(state)
 
         state.jobs[job_id].status = JobStatusEnum.DONE
         state.jobs[job_id].completed_at = datetime.utcnow()
@@ -313,6 +383,16 @@ def query(body: QueryRequest, request: Request) -> QueryResponse:
         query_vec: np.ndarray = state.encoder.encode([body.query])[0]
         state.drift_scheduler.enqueue_embedding(query_vec)
 
+    log_event(
+        "query",
+        {
+            "retrieval_hits": len(result.chunks),
+            "total_candidates": result.total_candidates,
+            "latency_ms": result.latency_ms,
+            "answer_chars": len(answer),
+        },
+    )
+
     return QueryResponse(
         answer=answer,
         chunks=result.chunks,
@@ -348,7 +428,72 @@ def drift_status(request: Request) -> DriftStatus:
         consecutive_alerts=det.consecutive_alerts,
         reindex_triggered=det.reindex_triggered,
         buffer_size=det.buffer_size,
+        baseline_ready=det.baseline_ready,
+        monitor_running=state.drift_scheduler is not None and state.drift_scheduler.is_running,
     )
+
+
+# Off-topic phrases used by /drift/simulate to fabricate a query-distribution
+# shift. Deliberately unrelated to any technical corpus.
+_OFF_TOPIC_PHRASES: tuple[str, ...] = (
+    "best slow cooker recipes for beef stew",
+    "how to improve my marathon training pace",
+    "top rated beach resorts in the maldives",
+    "acoustic guitar chords for beginners",
+    "when to plant tomatoes in a home garden",
+    "latest football transfer rumours and scores",
+    "easy sourdough bread starter instructions",
+    "reviews of mystery novels published this year",
+)
+
+
+@app.post("/drift/simulate")
+def drift_simulate(request: Request, windows: int = 3) -> dict[str, object]:
+    """Demo endpoint: push off-topic query traffic through the drift monitor.
+
+    Feeds one on-topic calibration window first (pseudo-queries sampled from
+    indexed chunks) if the baseline is not yet captured, then *windows* full
+    windows of off-topic queries — enough to walk the hysteresis counter up
+    and trigger the tiered alarms. Processing is synchronous so the response
+    reflects the final drift state.
+    """
+    state = get_state(request)
+    det = state.drift_detector
+    sched = state.drift_scheduler
+    if det is None or sched is None:
+        raise HTTPException(status_code=409, detail="Drift monitor not running; ingest first.")
+    windows = max(1, min(windows, 10))
+    window_size = int(state.drift_config.window_size)
+
+    def _feed(texts: list[str]) -> None:
+        for vec in state.encoder.encode(texts):
+            sched.enqueue_embedding(vec)
+        sched.process_now()
+
+    if not det.baseline_ready:
+        chunks = state.store.list_chunks()
+        on_topic = [
+            " ".join(chunks[i % len(chunks)].text.split()[:12])
+            for i in range(window_size - det.buffer_size)
+        ]
+        _feed(on_topic)
+
+    off_topic = [
+        f"{_OFF_TOPIC_PHRASES[i % len(_OFF_TOPIC_PHRASES)]} variation {i}"
+        for i in range(windows * window_size)
+    ]
+    _feed(off_topic)
+
+    # An auto re-index replaces the detector/scheduler; detect that by identity.
+    auto_reindexed = state.drift_scheduler is not sched
+    det = state.drift_detector
+    return {
+        "windows_fed": windows,
+        "consecutive_alerts": det.consecutive_alerts if det else 0,
+        "reindex_triggered": (det.reindex_triggered if det else False) or auto_reindexed,
+        "auto_reindexed": auto_reindexed,
+        "history_length": len(det.history) if det else 0,
+    }
 
 
 @app.post("/drift/reset")

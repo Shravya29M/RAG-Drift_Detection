@@ -138,6 +138,28 @@ class GroqRouter(LLMRouter):
         return content if content is not None else ""
 
 
+class ExtractiveRouter(LLMRouter):
+    """Keyless fallback: answers with the retrieved context instead of an LLM.
+
+    Used when no provider API key is configured so the pipeline stays fully
+    functional (retrieval, drift monitoring, UI) in demo deployments.  The
+    context block is extracted from the rendered prompt between the
+    ``Context:`` and ``Question:`` markers of the default template.
+    """
+
+    _NOTE = "(no LLM API key configured — showing retrieved context verbatim)\n\n"
+
+    def complete(self, prompt: str) -> str:
+        """Return the context section of *prompt* with an explanatory note."""
+        start = prompt.find("Context:")
+        end = prompt.find("Question:")
+        if start != -1 and end > start:
+            context = prompt[start + len("Context:") : end].strip()
+        else:
+            context = prompt.strip()
+        return self._NOTE + context
+
+
 def make_router(config: GenerationConfig) -> LLMRouter:
     """Instantiate the appropriate :class:`LLMRouter` based on available env vars.
 
@@ -146,7 +168,7 @@ def make_router(config: GenerationConfig) -> LLMRouter:
     1. ``OPENAI_API_KEY`` is set → :class:`OpenAIRouter`
     2. ``GROQ_API_KEY`` is set (and ``OPENAI_API_KEY`` is not) → :class:`GroqRouter`
     3. ``ANTHROPIC_API_KEY`` is set → :class:`AnthropicRouter`
-    4. Fall back to :class:`OpenAIRouter` (will fail at call time if key is absent)
+    4. No key at all → :class:`ExtractiveRouter` (keyless retrieval-only mode)
 
     Args:
         config: Generation configuration forwarded to the chosen router.
@@ -160,4 +182,4 @@ def make_router(config: GenerationConfig) -> LLMRouter:
         return GroqRouter(config)
     if os.environ.get("ANTHROPIC_API_KEY"):
         return AnthropicRouter(config)
-    return OpenAIRouter(config)
+    return ExtractiveRouter()

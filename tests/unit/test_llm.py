@@ -8,7 +8,14 @@ from unittest.mock import MagicMock, patch
 import anthropic
 import pytest
 
-from rag.generation.llm import AnthropicRouter, GroqRouter, LLMRouter, OpenAIRouter, make_router
+from rag.generation.llm import (
+    AnthropicRouter,
+    ExtractiveRouter,
+    GroqRouter,
+    LLMRouter,
+    OpenAIRouter,
+    make_router,
+)
 from rag.generation.prompt import build_prompt
 from rag.models import Chunk, ChunkMetadata, GenerationConfig, SourceType
 
@@ -387,10 +394,16 @@ class TestMakeRouter:
             router = make_router(_cfg())
         assert isinstance(router, AnthropicRouter)
 
-    def test_no_keys_falls_back_to_openai_router(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_no_keys_falls_back_to_extractive_router(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("GROQ_API_KEY", raising=False)
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        with patch("rag.generation.llm.OpenAI"):
-            router = make_router(_cfg())
-        assert isinstance(router, OpenAIRouter)
+        router = make_router(_cfg())
+        assert isinstance(router, ExtractiveRouter)
+
+    def test_extractive_router_returns_context_section(self) -> None:
+        router = ExtractiveRouter()
+        prompt = "Preamble.\n\nContext:\nsome retrieved facts\n\nQuestion: what?\n\nAnswer:"
+        answer = router.complete(prompt)
+        assert "some retrieved facts" in answer
+        assert "Question" not in answer.split("\n\n", 1)[1]

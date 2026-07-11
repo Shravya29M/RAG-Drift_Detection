@@ -48,7 +48,7 @@ class TestLogEvent:
         with (
             patch("rag.tracking.wandb.run", new=MagicMock()),
             patch("rag.tracking.wandb.log") as mock_log,
-            patch.dict("os.environ", {}, clear=False),
+            patch.dict("os.environ", {"WANDB_DISABLED": ""}),
         ):
             log_event("my_event", {"score": 0.5})
             mock_log.assert_called_once_with({"my_event/score": 0.5})
@@ -57,6 +57,7 @@ class TestLogEvent:
         with (
             patch("rag.tracking.wandb.run", new=MagicMock()),
             patch("rag.tracking.wandb.log") as mock_log,
+            patch.dict("os.environ", {"WANDB_DISABLED": ""}),
         ):
             log_event("drift_window", {"statistic": 0.3, "pvalue": 0.1})
             logged = mock_log.call_args[0][0]
@@ -93,6 +94,7 @@ class TestLogEvent:
         with (
             patch("rag.tracking.wandb.run", new=MagicMock()),
             patch("rag.tracking.wandb.log") as mock_log,
+            patch.dict("os.environ", {"WANDB_DISABLED": ""}),
         ):
             log_event("ev", {})
             mock_log.assert_called_once_with({})

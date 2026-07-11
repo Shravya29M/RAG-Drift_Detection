@@ -6,10 +6,8 @@ ingestion:
   supported_extensions: [".pdf", ".md", ".txt"]
 
 embedding:
-  default_model: "sentence-transformers/all-MiniLM-L6-v2"
-  openai_model: "text-embedding-ada-002"
+  model_name: "sentence-transformers/all-MiniLM-L6-v2"
   batch_size: 64
-  cache_dir: ".cache/embeddings"
 
 vector_store:
   backend: "faiss"         # "faiss" | "qdrant"
@@ -35,14 +33,17 @@ generation:
 drift:
   window_size: 50          # queries per drift evaluation window
   pca_components: 32       # dimensionality before KS/MMD test
-  threshold_alpha: 0.05    # p-value threshold for KS test
+  threshold_alpha: 0.05    # KS significance level (Bonferroni-corrected per dimension)
   mmd_threshold: 0.01      # MMD statistic threshold
   hysteresis_windows: 3    # consecutive alert windows before re-index
   method: "ks"             # "ks" | "mmd"
 
 scheduler:
-  drift_check_interval_seconds: 300
-  reindex_cooldown_seconds: 3600
+  drift_check_interval_seconds: 30
+
+alarm:
+  webhook_url: ""          # overridden by env DRIFT_WEBHOOK_URL
+  webhook_timeout_s: 5.0
 
 logging:
   level: "INFO"
