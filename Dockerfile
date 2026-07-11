@@ -51,8 +51,9 @@ COPY pyproject.toml .
 RUN mkdir -p /app/data /app/index
 
 EXPOSE 8000
+ENV PORT=8000
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=5 \
-    CMD curl -f http://localhost:8000/healthz || exit 1
+    CMD curl -f http://localhost:${PORT}/healthz || exit 1
 
-CMD ["uvicorn", "rag.api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn rag.api:app --host 0.0.0.0 --port ${PORT}"]
