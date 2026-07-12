@@ -256,6 +256,21 @@ class TestAutoAlarm:
             mock_client.post.assert_called_once()
             cb.assert_called_once()
 
+    def test_auto_webhook_requests_corpus_remediation(self) -> None:
+        cb = MagicMock()
+        alarm = self._auto_alarm(cb, webhook="https://example.com/hook")
+        mock_client = MagicMock()
+        mock_client.post.return_value = _ok_response()
+        with (
+            patch("rag.drift.alarm.log_event"),
+            patch("rag.drift.alarm.httpx.Client") as mock_client_cls,
+        ):
+            mock_client_cls.return_value.__enter__.return_value = mock_client
+            alarm.fire(_result(), AlarmLevel.AUTO)
+        payload = mock_client.post.call_args.kwargs["json"]
+        assert payload["alert"] == "quality_degradation_remediation_required"
+        assert "ingest documents" in payload["recommended_action"]
+
     def test_auto_no_callback_registered_does_not_raise(self) -> None:
         alarm = DriftAlarm(_cfg())
         with patch("rag.drift.alarm.log_event"):

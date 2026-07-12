@@ -232,6 +232,14 @@ class AlarmConfig(BaseModel):
         gt=0.0,
         description="Seconds before the webhook POST times out.",
     )
+    auto_remediation_cooldown_s: float = Field(
+        default=3600.0,
+        gt=0.0,
+        description=(
+            "Minimum seconds between new AUTO remediation incidents after a prior incident "
+            "has been resolved. Open incidents are always deduplicated."
+        ),
+    )
 
 
 class DriftConfig(BaseModel):
@@ -369,6 +377,39 @@ class JobStatus(BaseModel):
         default=None,
         description="Error message if status is 'error'; None otherwise.",
     )
+
+
+class RemediationStatus(StrEnum):
+    """Lifecycle state for a quality-degradation remediation incident."""
+
+    OPEN = "open"
+    RESOLVED = "resolved"
+
+
+class RemediationIncident(BaseModel):
+    """Human-actionable record created when quality-gated AUTO escalation fires."""
+
+    incident_id: str = Field(description="Unique incident identifier (UUID4).")
+    status: RemediationStatus = Field(default=RemediationStatus.OPEN)
+    opened_at: datetime = Field(description="UTC time the incident was opened.")
+    updated_at: datetime = Field(description="UTC time the incident was last updated.")
+    occurrences: int = Field(default=1, ge=1, description="Number of deduplicated AUTO events.")
+    mean_top_score: float | None = Field(default=None)
+    baseline_mean_score: float | None = Field(default=None)
+    quality_degraded: bool = Field(default=True)
+    resolution: str | None = Field(default=None)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class ResolveRemediationRequest(BaseModel):
+    """Operator disposition for a remediation incident."""
+
+    resolution: str = Field(
+        min_length=1,
+        max_length=120,
+        description="For example: content_ingested, false_positive, or accepted_risk.",
+    )
+    notes: str | None = Field(default=None, max_length=2000)
 
 
 class QueryRequest(BaseModel):

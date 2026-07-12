@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import threading
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -41,6 +42,9 @@ from rag.models import (
     JobStatusEnum,
     QueryRequest,
     QueryResponse,
+    RemediationIncident,
+    RemediationStatus,
+    ResolveRemediationRequest,
     SourceType,
 )
 from rag.retrieval.retriever import Retriever
@@ -77,6 +81,8 @@ class AppState:
     drift_detector: DriftDetector | None = None
     drift_scheduler: DriftScheduler | None = None
     jobs: dict[str, JobStatus] = field(default_factory=dict)
+    remediation_incidents: dict[str, RemediationIncident] = field(default_factory=dict)
+    remediation_lock: threading.RLock = field(default_factory=threading.RLock)
 
 
 # ---------------------------------------------------------------------------
@@ -181,7 +187,7 @@ def _start_drift_monitor(state: AppState) -> None:
 
     snapshot = DistributionSnapshot(snap_embs, state.drift_config)
     detector = DriftDetector(snapshot, state.drift_config)
-    alarm = DriftAlarm(state.alarm_config, re_index_callback=lambda: _auto_reindex(state))
+    alarm = DriftAlarm(state.alarm_config, re_index_callback=lambda: _open_remediation(state))
     scheduler = DriftScheduler(
         detector,
         alarm,
@@ -198,12 +204,52 @@ def _start_drift_monitor(state: AppState) -> None:
     logger.info("drift monitor started")
 
 
-def _auto_reindex(state: AppState) -> None:
-    """AUTO-alarm callback: run a re-index as a tracked background job."""
-    logger.info("drift hysteresis reached — auto re-index triggered")
-    log_event("reindex", {"trigger": "auto_drift"})
-    job_id = _new_job(state)
-    _run_reindex(state, job_id)
+def _open_remediation(state: AppState) -> None:
+    """Open or deduplicate a human remediation request after AUTO escalation.
+
+    Re-embedding unchanged chunks cannot add missing knowledge, so AUTO creates
+    a work item instead of pretending a re-index repaired the corpus. An open
+    incident absorbs repeated alarms; after resolution, a cooldown prevents an
+    immediate re-opening.
+    """
+    now = datetime.utcnow()
+    detector = state.drift_detector
+    latest = detector.history[-1] if detector is not None and detector.history else None
+    with state.remediation_lock:
+        open_incidents = [
+            incident
+            for incident in state.remediation_incidents.values()
+            if incident.status is RemediationStatus.OPEN
+        ]
+        if open_incidents:
+            incident = max(open_incidents, key=lambda item: item.updated_at)
+            incident.occurrences += 1
+            incident.updated_at = now
+            log_event(
+                "remediation", {"action": "deduplicated", "incident_id": incident.incident_id}
+            )
+            return
+
+        latest_closed = max(
+            state.remediation_incidents.values(), key=lambda item: item.updated_at, default=None
+        )
+        if latest_closed is not None:
+            age_s = (now - latest_closed.updated_at).total_seconds()
+            if age_s < state.alarm_config.auto_remediation_cooldown_s:
+                log_event("remediation", {"action": "cooldown_suppressed", "age_s": age_s})
+                return
+
+        incident_id = str(uuid.uuid4())
+        state.remediation_incidents[incident_id] = RemediationIncident(
+            incident_id=incident_id,
+            opened_at=now,
+            updated_at=now,
+            mean_top_score=latest.mean_top_score if latest else None,
+            baseline_mean_score=detector.baseline_mean_score if detector else None,
+            quality_degraded=latest.quality_degraded if latest else True,
+        )
+    logger.warning("quality degradation incident opened: %s", incident_id)
+    log_event("remediation", {"action": "opened", "incident_id": incident_id})
 
 
 def _persist_index(state: AppState) -> None:
@@ -266,8 +312,9 @@ def _run_ingest(
             embeddings = state.encoder.encode(texts)
             state.store.add(all_chunks, embeddings)
             _persist_index(state)
-            if state.drift_scheduler is None:
-                _start_drift_monitor(state)
+            # New content changes the PCA snapshot. Restart calibration against
+            # the expanded corpus before evaluating more drift.
+            _start_drift_monitor(state)
         state.jobs[job_id].status = JobStatusEnum.DONE
         state.jobs[job_id].completed_at = datetime.utcnow()
     except Exception as exc:  # noqa: BLE001
@@ -438,6 +485,43 @@ def drift_status(request: Request) -> DriftStatus:
     )
 
 
+@app.get("/remediations", response_model=list[RemediationIncident])
+def list_remediations(request: Request, open_only: bool = False) -> list[RemediationIncident]:
+    """List quality-degradation work items created by AUTO escalation."""
+    state = get_state(request)
+    with state.remediation_lock:
+        incidents = list(state.remediation_incidents.values())
+    if open_only:
+        incidents = [item for item in incidents if item.status is RemediationStatus.OPEN]
+    return sorted(incidents, key=lambda item: item.opened_at, reverse=True)
+
+
+@app.post("/remediations/{incident_id}/resolve", response_model=RemediationIncident)
+def resolve_remediation(
+    incident_id: str, payload: ResolveRemediationRequest, request: Request
+) -> RemediationIncident:
+    """Record an operator disposition after investigating a remediation alert.
+
+    Use ``content_ingested`` only after POST /ingest has completed successfully;
+    ingestion refreshes the index snapshot and restarts drift calibration.
+    """
+    state = get_state(request)
+    with state.remediation_lock:
+        incident = state.remediation_incidents.get(incident_id)
+        if incident is None:
+            raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found")
+        if incident.status is RemediationStatus.RESOLVED:
+            raise HTTPException(
+                status_code=409, detail=f"Incident '{incident_id}' is already resolved"
+            )
+        incident.status = RemediationStatus.RESOLVED
+        incident.resolution = payload.resolution
+        incident.notes = payload.notes
+        incident.updated_at = datetime.utcnow()
+    log_event("remediation", {"action": "resolved", "incident_id": incident_id})
+    return incident
+
+
 # Off-topic phrases used by /drift/simulate to fabricate a query-distribution
 # shift. Deliberately unrelated to any technical corpus.
 _OFF_TOPIC_PHRASES: tuple[str, ...] = (
@@ -493,14 +577,15 @@ def drift_simulate(request: Request, windows: int = 3) -> dict[str, object]:
     ]
     _feed(off_topic)
 
-    # An auto re-index replaces the detector/scheduler; detect that by identity.
-    auto_reindexed = state.drift_scheduler is not sched
     det = state.drift_detector
     return {
         "windows_fed": windows,
         "consecutive_alerts": det.consecutive_alerts if det else 0,
-        "reindex_triggered": (det.reindex_triggered if det else False) or auto_reindexed,
-        "auto_reindexed": auto_reindexed,
+        "reindex_triggered": det.reindex_triggered if det else False,
+        "open_remediations": sum(
+            incident.status is RemediationStatus.OPEN
+            for incident in state.remediation_incidents.values()
+        ),
         "history_length": len(det.history) if det else 0,
     }
 
@@ -540,6 +625,11 @@ def metrics(request: Request) -> str:
     jobs_total = len(state.jobs)
     jobs_done = sum(1 for j in state.jobs.values() if j.status == JobStatusEnum.DONE)
     jobs_error = sum(1 for j in state.jobs.values() if j.status == JobStatusEnum.ERROR)
+    open_remediations = sum(
+        1
+        for incident in state.remediation_incidents.values()
+        if incident.status is RemediationStatus.OPEN
+    )
 
     lines = [
         "# HELP rag_scheduler_queue_size Embeddings waiting in the drift scheduler queue",
@@ -563,5 +653,8 @@ def metrics(request: Request) -> str:
         "# HELP rag_jobs_error Failed background jobs",
         "# TYPE rag_jobs_error counter",
         f"rag_jobs_error {jobs_error}",
+        "# HELP rag_remediations_open Open quality-degradation remediation incidents",
+        "# TYPE rag_remediations_open gauge",
+        f"rag_remediations_open {open_remediations}",
     ]
     return "\n".join(lines) + "\n"

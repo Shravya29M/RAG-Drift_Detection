@@ -67,7 +67,7 @@ class DriftAlarm:
         self._soft(result)
 
         if level in (AlarmLevel.HARD, AlarmLevel.AUTO):
-            self._hard(result)
+            self._hard(result, level)
 
         if level is AlarmLevel.AUTO:
             self._auto(result)
@@ -91,7 +91,7 @@ class DriftAlarm:
             data["mean_top_score"] = result.mean_top_score
         log_event("drift_window", data)
 
-    def _hard(self, result: DriftResult) -> None:
+    def _hard(self, result: DriftResult, level: AlarmLevel) -> None:
         """POST a JSON alert payload to the configured webhook URL.
 
         Silently skips when ``config.webhook_url`` is empty.  Network errors
@@ -101,7 +101,9 @@ class DriftAlarm:
         if not self._config.webhook_url:
             return
         payload = {
-            "alert": "drift_detected",
+            "alert": "quality_degradation_remediation_required"
+            if level is AlarmLevel.AUTO
+            else "drift_detected",
             "statistic": result.statistic,
             "pvalue": result.pvalue,
             "mean_top_score": result.mean_top_score,
@@ -110,6 +112,11 @@ class DriftAlarm:
             "window_size": result.window_size,
             "snapshot_size": result.snapshot_size,
         }
+        if level is AlarmLevel.AUTO:
+            payload["recommended_action"] = (
+                "Investigate current demand and ingest documents that cover it; "
+                "re-indexing unchanged chunks cannot add missing knowledge."
+            )
         try:
             with httpx.Client(timeout=self._config.webhook_timeout_s) as client:
                 response = client.post(self._config.webhook_url, json=payload)

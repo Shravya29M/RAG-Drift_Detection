@@ -1,0 +1,18 @@
+[
+  {"query": "What does retrieval-augmented generation ground an answer in?", "source": "retrieval_augmented_generation.md"},
+  {"query": "Why does RAG reduce hallucinations?", "source": "retrieval_augmented_generation.md"},
+  {"query": "Which document formats can be ingested?", "source": "retrieval_augmented_generation.md"},
+  {"query": "Why are chunk windows overlapped during ingestion?", "source": "retrieval_augmented_generation.md"},
+  {"query": "What provenance metadata is kept for a chunk?", "source": "retrieval_augmented_generation.md"},
+  {"query": "Why are embeddings L2 normalised before FAISS search?", "source": "retrieval_augmented_generation.md"},
+  {"query": "Which similarity measure does the FAISS inner product represent here?", "source": "retrieval_augmented_generation.md"},
+  {"query": "What should the system say when it retrieves no relevant context?", "source": "retrieval_augmented_generation.md"},
+  {"query": "What is query distribution drift in a retrieval system?", "source": "embedding_drift.md"},
+  {"query": "Why can a retrieval system degrade even when documents have not changed?", "source": "embedding_drift.md"},
+  {"query": "How are query embedding windows compared for drift?", "source": "embedding_drift.md"},
+  {"query": "What does the PCA basis use as its reference?", "source": "embedding_drift.md"},
+  {"query": "Why is a Bonferroni correction applied to the KS tests?", "source": "embedding_drift.md"},
+  {"query": "Why is hysteresis useful for drift alarms?", "source": "embedding_drift.md"},
+  {"query": "What happens after several consecutive drifted windows?", "source": "embedding_drift.md"},
+  {"query": "How does the index swap avoid interrupting in-flight searches?", "source": "embedding_drift.md"}
+]

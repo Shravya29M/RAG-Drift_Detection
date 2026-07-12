@@ -45,6 +45,7 @@ scheduler:
 alarm:
   webhook_url: ""          # overridden by env DRIFT_WEBHOOK_URL
   webhook_timeout_s: 5.0
+  auto_remediation_cooldown_s: 3600 # prevent a resolved incident reopening immediately
 
 logging:
   level: "INFO"

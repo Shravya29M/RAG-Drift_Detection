@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
-from rag.api import AppState, app
+from rag.api import AppState, _open_remediation, app
 from rag.drift.detector import DriftDetector
 from rag.drift.scheduler import DriftScheduler
 from rag.embedding.encoder import Encoder
@@ -21,6 +21,7 @@ from rag.models import (
     DriftConfig,
     GenerationConfig,
     IngestConfig,
+    RemediationStatus,
     SourceType,
 )
 from rag.retrieval.retriever import Retriever
@@ -299,6 +300,54 @@ class TestReindex:
         job_id = r.json()["job_id"]
         status_r = client.get(f"/jobs/{job_id}")
         assert status_r.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# AUTO remediation workflow
+# ---------------------------------------------------------------------------
+
+
+class TestRemediation:
+    def test_auto_opens_then_deduplicates_an_incident(self) -> None:
+        state = _make_state()
+        _open_remediation(state)
+        _open_remediation(state)
+        incidents = list(state.remediation_incidents.values())
+        assert len(incidents) == 1
+        assert incidents[0].status is RemediationStatus.OPEN
+        assert incidents[0].occurrences == 2
+
+    def test_operator_can_resolve_incident_once(self) -> None:
+        state = _make_state()
+        _open_remediation(state)
+        incident_id = next(iter(state.remediation_incidents))
+        app.state.app = state
+        with TestClient(app) as c:
+            listed = c.get("/remediations?open_only=true")
+            assert listed.status_code == 200
+            assert listed.json()[0]["incident_id"] == incident_id
+
+            resolved = c.post(
+                f"/remediations/{incident_id}/resolve",
+                json={"resolution": "content_ingested", "notes": "Runbook document added."},
+            )
+            assert resolved.status_code == 200
+            assert resolved.json()["status"] == "resolved"
+            assert resolved.json()["resolution"] == "content_ingested"
+
+            repeated = c.post(
+                f"/remediations/{incident_id}/resolve",
+                json={"resolution": "content_ingested"},
+            )
+        assert repeated.status_code == 409
+
+    def test_resolved_incident_applies_auto_cooldown(self) -> None:
+        state = _make_state()
+        _open_remediation(state)
+        incident = next(iter(state.remediation_incidents.values()))
+        incident.status = RemediationStatus.RESOLVED
+        _open_remediation(state)
+        assert len(state.remediation_incidents) == 1
 
 
 # ---------------------------------------------------------------------------
