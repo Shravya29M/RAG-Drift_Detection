@@ -72,6 +72,7 @@ class AppState:
     drift_config: DriftConfig
     alarm_config: AlarmConfig = field(default_factory=AlarmConfig)
     drift_interval_s: float = 30.0
+    search_top_k: int = 5
     index_path: Path | None = None
     drift_detector: DriftDetector | None = None
     drift_scheduler: DriftScheduler | None = None
@@ -114,6 +115,7 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 drift_config=settings.drift,
                 alarm_config=settings.alarm,
                 drift_interval_s=settings.scheduler.drift_check_interval_seconds,
+                search_top_k=settings.vector_store.top_k,
                 index_path=settings.vector_store.faiss_index_path,
             )
             app.state.app = state
@@ -381,7 +383,9 @@ def query(body: QueryRequest, request: Request) -> QueryResponse:
 
     if state.drift_scheduler is not None:
         query_vec: np.ndarray = state.encoder.encode([body.query])[0]
-        state.drift_scheduler.enqueue_embedding(query_vec)
+        # 0.0 for a no-hit query is itself a quality signal, not missing data.
+        top_score = float(np.mean(result.scores)) if result.scores else 0.0
+        state.drift_scheduler.enqueue_embedding(query_vec, top_score=top_score)
 
     log_event(
         "query",
@@ -430,6 +434,7 @@ def drift_status(request: Request) -> DriftStatus:
         buffer_size=det.buffer_size,
         baseline_ready=det.baseline_ready,
         monitor_running=state.drift_scheduler is not None and state.drift_scheduler.is_running,
+        baseline_mean_score=det.baseline_mean_score,
     )
 
 
@@ -466,8 +471,12 @@ def drift_simulate(request: Request, windows: int = 3) -> dict[str, object]:
     window_size = int(state.drift_config.window_size)
 
     def _feed(texts: list[str]) -> None:
+        # Run real retrieval per query so the quality gate sees genuine scores:
+        # off-topic queries score low against the corpus, on-topic ones high.
         for vec in state.encoder.encode(texts):
-            sched.enqueue_embedding(vec)
+            hits = state.store.search(vec, state.search_top_k)
+            score = float(np.mean([h.score for h in hits])) if hits else 0.0
+            sched.enqueue_embedding(vec, top_score=score)
         sched.process_now()
 
     if not det.baseline_ready:

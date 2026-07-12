@@ -56,7 +56,7 @@ class DriftScheduler:
         self._alarm = alarm
         self._config = config
         self._interval_s = drift_check_interval_s
-        self._embedding_queue: queue.Queue[np.ndarray] = queue.Queue()
+        self._embedding_queue: queue.Queue[tuple[np.ndarray, float | None]] = queue.Queue()
         self._scheduler = BackgroundScheduler()
         self._job_id = "drift_check"
         # Serialises detector access between the APScheduler tick thread and
@@ -98,16 +98,23 @@ class DriftScheduler:
     # Public interface used by API / ingestion layer
     # ------------------------------------------------------------------
 
-    def enqueue_embedding(self, embedding: np.ndarray) -> None:
-        """Push one query embedding into the processing queue.
+    def enqueue_embedding(
+        self,
+        embedding: np.ndarray,
+        top_score: float | None = None,
+    ) -> None:
+        """Push one query embedding (and its retrieval score) into the queue.
 
         Non-blocking and thread-safe.  The embedding will be consumed by the
         next scheduler tick.
 
         Args:
             embedding: L2-normalised float32 vector of shape ``(dim,)``.
+            top_score: Mean retrieval score for this query; feeds the
+                detector's quality gate.  ``None`` disables quality gating
+                for this sample.
         """
-        self._embedding_queue.put(np.asarray(embedding, dtype=np.float32))
+        self._embedding_queue.put((np.asarray(embedding, dtype=np.float32), top_score))
 
     def process_now(self) -> None:
         """Drain the queue immediately instead of waiting for the next tick.
@@ -138,19 +145,28 @@ class DriftScheduler:
         Called by APScheduler on every interval tick.  Any :class:`~rag.models.DriftResult`
         returned by the detector triggers alarm selection:
 
-        - ``AUTO`` when hysteresis threshold reached (``detector.reindex_triggered``)
-        - ``SOFT`` for the first drifted window or a clean window
+        - ``AUTO`` when hysteresis fired with degraded retrieval quality
+          (``detector.reindex_triggered``) — genuine index staleness
+        - ``HARD`` when hysteresis fired but retrieval is still healthy
+          (``result.recalibrated``) — persistent topic shift, humans notified,
+          baseline recalibrated, no re-index
+        - ``SOFT`` for a single drifted window or a clean window
         """
         with self._tick_lock:
             while True:
                 try:
-                    embedding = self._embedding_queue.get_nowait()
+                    embedding, top_score = self._embedding_queue.get_nowait()
                 except queue.Empty:
                     break
 
-                result = self._detector.add_query_embedding(embedding)
+                result = self._detector.add_query_embedding(embedding, top_score)
                 if result is None:
                     continue
 
-                level = AlarmLevel.AUTO if self._detector.reindex_triggered else AlarmLevel.SOFT
+                if self._detector.reindex_triggered:
+                    level = AlarmLevel.AUTO
+                elif result.recalibrated:
+                    level = AlarmLevel.HARD
+                else:
+                    level = AlarmLevel.SOFT
                 self._alarm.fire(result, level)

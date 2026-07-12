@@ -265,6 +265,17 @@ class DriftConfig(BaseModel):
         default="ks",
         description="Detection method: 'ks' (KS test per PCA dimension, max stat).",
     )
+    quality_drop_ratio: float = Field(
+        default=0.85,
+        gt=0.0,
+        le=1.0,
+        description=(
+            "Retrieval quality gate: a drifted window only counts as index "
+            "staleness when its mean top-k score falls below this fraction of "
+            "the calibration baseline's mean score. Drift with healthy scores "
+            "is treated as a benign topic shift and recalibrates the baseline."
+        ),
+    )
 
 
 class DriftResult(BaseModel):
@@ -289,6 +300,25 @@ class DriftResult(BaseModel):
     snapshot_size: int = Field(
         ge=1,
         description="Number of chunk embeddings in the reference snapshot.",
+    )
+    mean_top_score: float | None = Field(
+        default=None,
+        description="Mean retrieval score across queries in this window; None if not tracked.",
+    )
+    quality_degraded: bool = Field(
+        default=False,
+        description=(
+            "True when mean_top_score fell below quality_drop_ratio × the "
+            "calibration baseline's mean score."
+        ),
+    )
+    recalibrated: bool = Field(
+        default=False,
+        description=(
+            "True when sustained drift with healthy retrieval scores caused the "
+            "detector to adopt this window as the new baseline instead of "
+            "triggering a re-index."
+        ),
     )
     evaluated_at: datetime = Field(
         default_factory=datetime.utcnow,
@@ -375,6 +405,10 @@ class DriftStatus(BaseModel):
     monitor_running: bool = Field(
         default=False,
         description="True while the background drift scheduler is active.",
+    )
+    baseline_mean_score: float | None = Field(
+        default=None,
+        description="Mean retrieval score of the calibration baseline; None until calibrated.",
     )
 
 

@@ -7,7 +7,7 @@
 It starts like a typical pipeline. Documents are ingested, a FAISS vector index is built, and user queries are answered by retrieving the most relevant chunks and passing them to an LLM.
 The difference is that it does not assume things will keep working well over time. In the background, a drift monitor keeps track of how incoming queries evolve. It projects query embeddings onto a PCA basis fitted on the indexed corpus, calibrates a baseline from the first window of real query traffic, and compares each subsequent 50-query window against that baseline with a per-dimension two-sample KS test (Bonferroni-corrected p-values).
 
-If the system detects consistent drift across multiple windows, with hysteresis to avoid false alarms, it triggers alerts in stages. It starts with logs and can escalate to webhooks or callbacks if needed. It can also automatically trigger re-indexing, allowing the system to adapt on its own and maintain retrieval quality without constant manual intervention.
+If the system detects consistent drift across multiple windows, with hysteresis to avoid false alarms, it triggers alerts in stages — but drift alone never means the index is stale. Users asking about a new topic the corpus already covers is not a failure. So the escalation is quality-gated: sustained drift with healthy retrieval scores is treated as a benign topic shift (webhook alert, baseline recalibrated to the new normal, no re-index), while sustained drift combined with degraded retrieval scores is genuine staleness and triggers an automatic re-index.
 
 ---
 
@@ -132,7 +132,7 @@ Evaluated on 50 ground-truth (query, relevant document) pairs from the test corp
 
 1. Start the stack (`docker-compose up` or `uvicorn rag.api:app`) — sample docs are ingested and the drift monitor starts automatically.
 2. Ask a few questions via `/query` or the web UI; query embeddings stream into the monitor's rolling window.
-3. Hit `POST /drift/simulate?windows=3` (or the **simulate drift** button in the UI). Off-topic traffic drifts three consecutive windows, the alarm escalates soft → webhook → auto, and the system re-indexes and recalibrates its baseline. `GET /drift` and `GET /metrics` show every step.
+3. Hit `POST /drift/simulate?windows=3` (or the **simulate drift** button in the UI). Off-topic traffic drifts three consecutive windows *and* scores poorly against the corpus, so the quality gate confirms staleness: the alarm escalates soft → auto, the system re-indexes and recalibrates its baseline. `GET /drift` and `GET /metrics` show every step, including per-window mean retrieval scores.
 
 The FAISS index is persisted to `index/` after every write and restored on startup, so restarts lose nothing.
 

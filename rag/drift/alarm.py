@@ -78,16 +78,18 @@ class DriftAlarm:
 
     def _soft(self, result: DriftResult) -> None:
         """Log drift metrics to W&B."""
-        log_event(
-            "drift_window",
-            {
-                "statistic": result.statistic,
-                "pvalue": result.pvalue,
-                "drifted": int(result.drifted),
-                "window_size": result.window_size,
-                "snapshot_size": result.snapshot_size,
-            },
-        )
+        data: dict[str, object] = {
+            "statistic": result.statistic,
+            "pvalue": result.pvalue,
+            "drifted": int(result.drifted),
+            "quality_degraded": int(result.quality_degraded),
+            "recalibrated": int(result.recalibrated),
+            "window_size": result.window_size,
+            "snapshot_size": result.snapshot_size,
+        }
+        if result.mean_top_score is not None:
+            data["mean_top_score"] = result.mean_top_score
+        log_event("drift_window", data)
 
     def _hard(self, result: DriftResult) -> None:
         """POST a JSON alert payload to the configured webhook URL.
@@ -102,6 +104,9 @@ class DriftAlarm:
             "alert": "drift_detected",
             "statistic": result.statistic,
             "pvalue": result.pvalue,
+            "mean_top_score": result.mean_top_score,
+            "quality_degraded": result.quality_degraded,
+            "recalibrated": result.recalibrated,
             "window_size": result.window_size,
             "snapshot_size": result.snapshot_size,
         }

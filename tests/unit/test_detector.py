@@ -7,6 +7,7 @@ from typing import cast
 from unittest.mock import MagicMock
 
 import numpy as np
+import pytest
 
 from rag.drift.detector import DriftDetector
 from rag.drift.snapshot import DistributionSnapshot
@@ -324,3 +325,81 @@ class TestReset:
         assert det.reindex_triggered
         det.reset()
         assert not det.reindex_triggered
+
+
+# ---------------------------------------------------------------------------
+# Quality gate — drift alone must not mean "stale index"
+# ---------------------------------------------------------------------------
+
+
+def _feed_scored_windows(det: DriftDetector, n: int, score: float) -> None:
+    """Feed *n* full windows where every query carries *score*."""
+    for _ in range(n):
+        for _ in range(WINDOW):
+            det.add_query_embedding(_vec(), top_score=score)
+
+
+class TestQualityGate:
+    def test_drift_with_healthy_scores_recalibrates_not_reindexes(self) -> None:
+        """Users asking new questions the corpus still answers well → no re-index."""
+        det = _detector([_drift_result(drifted=True)] * 3)
+        _feed_scored_windows(det, 1, score=0.8)  # calibration baseline
+        _feed_scored_windows(det, 3, score=0.8)  # drifted but scores unchanged
+        assert not det.reindex_triggered
+        assert det.history[-1].recalibrated
+        assert not det.history[-1].quality_degraded
+
+    def test_recalibration_resets_hysteresis_counter(self) -> None:
+        det = _detector([_drift_result(drifted=True)] * 3)
+        _feed_scored_windows(det, 1, score=0.8)
+        _feed_scored_windows(det, 3, score=0.8)
+        assert det.consecutive_alerts == 0
+
+    def test_recalibration_adopts_new_score_baseline(self) -> None:
+        det = _detector([_drift_result(drifted=True)] * 3)
+        _feed_scored_windows(det, 1, score=0.8)
+        _feed_scored_windows(det, 3, score=0.7)  # healthy: 0.7 > 0.85 * 0.8 = 0.68
+        assert not det.reindex_triggered
+        assert det.baseline_mean_score == pytest.approx(0.7)
+
+    def test_drift_with_degraded_scores_triggers_reindex(self) -> None:
+        """Drift plus falling retrieval scores → genuine staleness → re-index."""
+        det = _detector([_drift_result(drifted=True)] * 3)
+        _feed_scored_windows(det, 1, score=0.8)
+        _feed_scored_windows(det, 3, score=0.3)  # 0.3 < 0.85 * 0.8
+        assert det.reindex_triggered
+        assert det.history[-1].quality_degraded
+        assert not det.history[-1].recalibrated
+
+    def test_no_scores_falls_back_to_drift_only_trigger(self) -> None:
+        """Without a quality signal we cannot rule out staleness → old behaviour."""
+        det = _detector([_drift_result(drifted=True)] * 3)
+        _calibrate(det)
+        _feed_windows(det, 3)
+        assert det.reindex_triggered
+
+    def test_baseline_mean_score_captured_at_calibration(self) -> None:
+        det = _detector([])
+        _feed_scored_windows(det, 1, score=0.75)
+        assert det.baseline_mean_score == pytest.approx(0.75)
+
+    def test_result_carries_mean_top_score(self) -> None:
+        det = _detector([_drift_result(drifted=False)])
+        _feed_scored_windows(det, 1, score=0.8)
+        _feed_scored_windows(det, 1, score=0.6)
+        assert det.history[-1].mean_top_score == pytest.approx(0.6)
+
+    def test_reset_clears_score_baseline(self) -> None:
+        det = _detector([])
+        _feed_scored_windows(det, 1, score=0.8)
+        det.reset()
+        assert det.baseline_mean_score is None
+
+    def test_healthy_scores_below_hysteresis_do_not_recalibrate(self) -> None:
+        """One or two drifted windows never touch the baseline."""
+        det = _detector([_drift_result(drifted=True)] * 2)
+        _feed_scored_windows(det, 1, score=0.8)
+        _feed_scored_windows(det, 2, score=0.8)
+        assert det.baseline_mean_score == pytest.approx(0.8)
+        assert det.consecutive_alerts == 2
+        assert not det.history[-1].recalibrated

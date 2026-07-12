@@ -36,6 +36,7 @@ drift:
   threshold_alpha: 0.05    # KS significance level (Bonferroni-corrected per dimension)
   mmd_threshold: 0.01      # MMD statistic threshold
   hysteresis_windows: 3    # consecutive alert windows before re-index
+  quality_drop_ratio: 0.85 # window mean score below this fraction of baseline = stale index
   method: "ks"             # "ks" | "mmd"
 
 scheduler:
