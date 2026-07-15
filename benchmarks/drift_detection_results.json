@@ -1,0 +1,481 @@
+{
+  "config": {
+    "window_size": 50,
+    "alpha": 0.05,
+    "pca_components": 32,
+    "hysteresis_windows": 3,
+    "encoder": "all-MiniLM-L6-v2",
+    "dataset": "rajpurkar/squad validation",
+    "n_trials": 20,
+    "seed": 3407
+  },
+  "clean_windows_total": 200,
+  "false_alarm_windows": 9,
+  "false_alarm_rate": 0.045,
+  "detection_rate": 1.0,
+  "alarm_rate_within_budget": 1.0,
+  "median_windows_to_detect": 1,
+  "median_queries_to_detect": 50,
+  "trials": [
+    {
+      "trial": 0,
+      "titles_a": [
+        "Apollo_program",
+        "Martin_Luther",
+        "Construction",
+        "Imperialism",
+        "Force",
+        "Kenya"
+      ],
+      "titles_b": [
+        "Huguenot",
+        "Sky_(United_Kingdom)",
+        "Intergovernmental_Panel_on_Climate_Change",
+        "Fresno,_California",
+        "Oxygen",
+        "Pharmacy"
+      ],
+      "clean_windows": 10,
+      "false_alarms": 1,
+      "windows_to_detect": 1,
+      "windows_to_alarm": 6
+    },
+    {
+      "trial": 1,
+      "titles_a": [
+        "American_Broadcasting_Company",
+        "Super_Bowl_50",
+        "Pharmacy",
+        "Fresno,_California",
+        "Construction",
+        "Doctor_Who"
+      ],
+      "titles_b": [
+        "Victoria_(Australia)",
+        "Genghis_Khan",
+        "Yuan_dynasty",
+        "Warsaw",
+        "United_Methodist_Church",
+        "Immune_system"
+      ],
+      "clean_windows": 10,
+      "false_alarms": 0,
+      "windows_to_detect": 1,
+      "windows_to_alarm": 3
+    },
+    {
+      "trial": 2,
+      "titles_a": [
+        "Computational_complexity_theory",
+        "Newcastle_upon_Tyne",
+        "Civil_disobedience",
+        "Immune_system",
+        "Private_school",
+        "Rhine"
+      ],
+      "titles_b": [
+        "Doctor_Who",
+        "Martin_Luther",
+        "University_of_Chicago",
+        "Pharmacy",
+        "Huguenot",
+        "1973_oil_crisis"
+      ],
+      "clean_windows": 10,
+      "false_alarms": 0,
+      "windows_to_detect": 1,
+      "windows_to_alarm": 3
+    },
+    {
+      "trial": 3,
+      "titles_a": [
+        "European_Union_law",
+        "Harvard_University",
+        "Packet_switching",
+        "Warsaw",
+        "Victoria_(Australia)",
+        "Computational_complexity_theory"
+      ],
+      "titles_b": [
+        "University_of_Chicago",
+        "Kenya",
+        "Civil_disobedience",
+        "Islamism",
+        "1973_oil_crisis",
+        "Steam_engine"
+      ],
+      "clean_windows": 10,
+      "false_alarms": 0,
+      "windows_to_detect": 1,
+      "windows_to_alarm": 6
+    },
+    {
+      "trial": 4,
+      "titles_a": [
+        "American_Broadcasting_Company",
+        "Oxygen",
+        "Nikola_Tesla",
+        "Islamism",
+        "Steam_engine",
+        "Normans"
+      ],
+      "titles_b": [
+        "Computational_complexity_theory",
+        "Black_Death",
+        "University_of_Chicago",
+        "Harvard_University",
+        "Private_school",
+        "Civil_disobedience"
+      ],
+      "clean_windows": 10,
+      "false_alarms": 1,
+      "windows_to_detect": 1,
+      "windows_to_alarm": 3
+    },
+    {
+      "trial": 5,
+      "titles_a": [
+        "Computational_complexity_theory",
+        "Black_Death",
+        "Sky_(United_Kingdom)",
+        "Genghis_Khan",
+        "Private_school",
+        "Doctor_Who"
+      ],
+      "titles_b": [
+        "Harvard_University",
+        "University_of_Chicago",
+        "Packet_switching",
+        "Economic_inequality",
+        "Oxygen",
+        "Nikola_Tesla"
+      ],
+      "clean_windows": 10,
+      "false_alarms": 0,
+      "windows_to_detect": 1,
+      "windows_to_alarm": 3
+    },
+    {
+      "trial": 6,
+      "titles_a": [
+        "Victoria_and_Albert_Museum",
+        "Force",
+        "University_of_Chicago",
+        "Intergovernmental_Panel_on_Climate_Change",
+        "Southern_California",
+        "Packet_switching"
+      ],
+      "titles_b": [
+        "European_Union_law",
+        "Jacksonville,_Florida",
+        "Fresno,_California",
+        "Teacher",
+        "Normans",
+        "United_Methodist_Church"
+      ],
+      "clean_windows": 10,
+      "false_alarms": 1,
+      "windows_to_detect": 1,
+      "windows_to_alarm": 5
+    },
+    {
+      "trial": 7,
+      "titles_a": [
+        "Sky_(United_Kingdom)",
+        "Intergovernmental_Panel_on_Climate_Change",
+        "Yuan_dynasty",
+        "Steam_engine",
+        "Packet_switching",
+        "Teacher"
+      ],
+      "titles_b": [
+        "Islamism",
+        "Private_school",
+        "Immune_system",
+        "Amazon_rainforest",
+        "Kenya",
+        "Warsaw"
+      ],
+      "clean_windows": 10,
+      "false_alarms": 0,
+      "windows_to_detect": 1,
+      "windows_to_alarm": 3
+    },
+    {
+      "trial": 8,
+      "titles_a": [
+        "European_Union_law",
+        "Southern_California",
+        "Private_school",
+        "Amazon_rainforest",
+        "University_of_Chicago",
+        "Fresno,_California"
+      ],
+      "titles_b": [
+        "Pharmacy",
+        "Huguenot",
+        "Immune_system",
+        "Scottish_Parliament",
+        "Islamism",
+        "Newcastle_upon_Tyne"
+      ],
+      "clean_windows": 10,
+      "false_alarms": 0,
+      "windows_to_detect": 1,
+      "windows_to_alarm": 3
+    },
+    {
+      "trial": 9,
+      "titles_a": [
+        "Jacksonville,_Florida",
+        "Islamism",
+        "Black_Death",
+        "Fresno,_California",
+        "Rhine",
+        "Nikola_Tesla"
+      ],
+      "titles_b": [
+        "Kenya",
+        "Imperialism",
+        "Normans",
+        "Civil_disobedience",
+        "Yuan_dynasty",
+        "Sky_(United_Kingdom)"
+      ],
+      "clean_windows": 10,
+      "false_alarms": 1,
+      "windows_to_detect": 1,
+      "windows_to_alarm": 3
+    },
+    {
+      "trial": 10,
+      "titles_a": [
+        "Fresno,_California",
+        "Apollo_program",
+        "Steam_engine",
+        "Scottish_Parliament",
+        "Jacksonville,_Florida",
+        "Sky_(United_Kingdom)"
+      ],
+      "titles_b": [
+        "Chloroplast",
+        "Huguenot",
+        "Imperialism",
+        "United_Methodist_Church",
+        "1973_oil_crisis",
+        "Computational_complexity_theory"
+      ],
+      "clean_windows": 10,
+      "false_alarms": 2,
+      "windows_to_detect": 1,
+      "windows_to_alarm": 3
+    },
+    {
+      "trial": 11,
+      "titles_a": [
+        "Oxygen",
+        "Apollo_program",
+        "Pharmacy",
+        "Teacher",
+        "Jacksonville,_Florida",
+        "Normans"
+      ],
+      "titles_b": [
+        "Civil_disobedience",
+        "Newcastle_upon_Tyne",
+        "Prime_number",
+        "Economic_inequality",
+        "Steam_engine",
+        "Islamism"
+      ],
+      "clean_windows": 10,
+      "false_alarms": 1,
+      "windows_to_detect": 1,
+      "windows_to_alarm": 3
+    },
+    {
+      "trial": 12,
+      "titles_a": [
+        "Huguenot",
+        "Civil_disobedience",
+        "Immune_system",
+        "Prime_number",
+        "Victoria_(Australia)",
+        "Economic_inequality"
+      ],
+      "titles_b": [
+        "Rhine",
+        "Amazon_rainforest",
+        "Geology",
+        "Islamism",
+        "Black_Death",
+        "Steam_engine"
+      ],
+      "clean_windows": 10,
+      "false_alarms": 0,
+      "windows_to_detect": 1,
+      "windows_to_alarm": 3
+    },
+    {
+      "trial": 13,
+      "titles_a": [
+        "Packet_switching",
+        "Economic_inequality",
+        "Intergovernmental_Panel_on_Climate_Change",
+        "Computational_complexity_theory",
+        "Kenya",
+        "Fresno,_California"
+      ],
+      "titles_b": [
+        "Newcastle_upon_Tyne",
+        "French_and_Indian_War",
+        "University_of_Chicago",
+        "United_Methodist_Church",
+        "Martin_Luther",
+        "Doctor_Who"
+      ],
+      "clean_windows": 10,
+      "false_alarms": 0,
+      "windows_to_detect": 1,
+      "windows_to_alarm": 3
+    },
+    {
+      "trial": 14,
+      "titles_a": [
+        "Force",
+        "Steam_engine",
+        "Super_Bowl_50",
+        "French_and_Indian_War",
+        "Doctor_Who",
+        "Victoria_and_Albert_Museum"
+      ],
+      "titles_b": [
+        "Warsaw",
+        "European_Union_law",
+        "Rhine",
+        "Computational_complexity_theory",
+        "Nikola_Tesla",
+        "Ctenophora"
+      ],
+      "clean_windows": 10,
+      "false_alarms": 0,
+      "windows_to_detect": 1,
+      "windows_to_alarm": 3
+    },
+    {
+      "trial": 15,
+      "titles_a": [
+        "Jacksonville,_Florida",
+        "Kenya",
+        "Pharmacy",
+        "Scottish_Parliament",
+        "Victoria_(Australia)",
+        "Newcastle_upon_Tyne"
+      ],
+      "titles_b": [
+        "Doctor_Who",
+        "Force",
+        "University_of_Chicago",
+        "French_and_Indian_War",
+        "1973_oil_crisis",
+        "Fresno,_California"
+      ],
+      "clean_windows": 10,
+      "false_alarms": 0,
+      "windows_to_detect": 1,
+      "windows_to_alarm": 3
+    },
+    {
+      "trial": 16,
+      "titles_a": [
+        "Black_Death",
+        "Chloroplast",
+        "Computational_complexity_theory",
+        "Construction",
+        "Southern_California",
+        "Victoria_(Australia)"
+      ],
+      "titles_b": [
+        "Nikola_Tesla",
+        "Sky_(United_Kingdom)",
+        "Ctenophora",
+        "Imperialism",
+        "1973_oil_crisis",
+        "French_and_Indian_War"
+      ],
+      "clean_windows": 10,
+      "false_alarms": 0,
+      "windows_to_detect": 1,
+      "windows_to_alarm": 3
+    },
+    {
+      "trial": 17,
+      "titles_a": [
+        "Victoria_(Australia)",
+        "Computational_complexity_theory",
+        "Private_school",
+        "Steam_engine",
+        "Black_Death",
+        "Rhine"
+      ],
+      "titles_b": [
+        "Amazon_rainforest",
+        "Normans",
+        "Doctor_Who",
+        "Fresno,_California",
+        "Economic_inequality",
+        "Super_Bowl_50"
+      ],
+      "clean_windows": 10,
+      "false_alarms": 0,
+      "windows_to_detect": 1,
+      "windows_to_alarm": 3
+    },
+    {
+      "trial": 18,
+      "titles_a": [
+        "Normans",
+        "Construction",
+        "Super_Bowl_50",
+        "Geology",
+        "Packet_switching",
+        "Yuan_dynasty"
+      ],
+      "titles_b": [
+        "United_Methodist_Church",
+        "Victoria_and_Albert_Museum",
+        "Fresno,_California",
+        "Imperialism",
+        "Newcastle_upon_Tyne",
+        "Pharmacy"
+      ],
+      "clean_windows": 10,
+      "false_alarms": 2,
+      "windows_to_detect": 1,
+      "windows_to_alarm": 3
+    },
+    {
+      "trial": 19,
+      "titles_a": [
+        "Imperialism",
+        "Victoria_and_Albert_Museum",
+        "Victoria_(Australia)",
+        "Civil_disobedience",
+        "Rhine",
+        "Immune_system"
+      ],
+      "titles_b": [
+        "Nikola_Tesla",
+        "Chloroplast",
+        "Martin_Luther",
+        "Huguenot",
+        "United_Methodist_Church",
+        "Oxygen"
+      ],
+      "clean_windows": 10,
+      "false_alarms": 0,
+      "windows_to_detect": 1,
+      "windows_to_alarm": 3
+    }
+  ]
+}

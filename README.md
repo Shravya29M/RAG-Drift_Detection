@@ -134,7 +134,21 @@ Current results (run July 12, 2026):
 | Off-topic mean top-k score | 0.046 → AUTO path |
 | No-score fallback | AUTO path |
 
-The quality-gate cases use real retrieval scores, while deliberately scripting a sustained drift verdict; this validates the gate decision, not statistical drift-detector precision. These retrieval numbers are a smoke test, not evidence of production retrieval quality: the corpus has only two documents, the labels are author-written, and there is no LLM faithfulness evaluation. A next credible benchmark is a larger held-out, passage-level labelled set with benign-shift, uncovered-topic, and gradual-decay traffic.
+The quality-gate cases use real retrieval scores, while deliberately scripting a sustained drift verdict; this validates the gate decision, not statistical drift-detector precision. These retrieval numbers are a smoke test, not evidence of production retrieval quality: the corpus has only two documents, the labels are author-written, and there is no LLM faithfulness evaluation.
+
+### Drift-detector benchmark (uncovered-topic traffic)
+
+The statistical detector itself is benchmarked on real human queries: 20 trials, each indexing SQuAD articles from 6 topics, feeding 10 windows (500 queries) of in-distribution traffic, then abruptly shifting traffic to 6 unrelated topics. Default config throughout (window 50, KS test at alpha=0.05 Bonferroni-corrected, 32 PCA dims, 3-window hysteresis), `all-MiniLM-L6-v2` encoder. Script and full per-trial results: [`benchmarks/drift_detection_benchmark.py`](benchmarks/drift_detection_benchmark.py), [`benchmarks/drift_detection_results.json`](benchmarks/drift_detection_results.json). Run July 15, 2026:
+
+| Metric | Result |
+|--------|--------|
+| Topic-shift detection rate | 20 / 20 trials |
+| Median time to first detection | 1 window (50 queries) |
+| Hysteresis alarm within 6-window budget | 20 / 20 trials (median 3 windows) |
+| False escalations on clean traffic | 0 in 200 windows |
+| Per-window false-positive rate | 4.5% (9 / 200) — matching the configured alpha=0.05 |
+
+The per-window false-positive rate landing at the configured significance level shows the KS test is calibrated; hysteresis then absorbs those expected single-window blips, so no clean trial ever escalated. Remaining gaps: benign-shift traffic (drift with healthy retrieval) and gradual-decay traffic are exercised in unit tests but not yet in this benchmark.
 
 
 ---
