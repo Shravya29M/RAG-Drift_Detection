@@ -1,6 +1,9 @@
 # RAG Drift Detection
 
-![CI](https://github.com/Shravya29M/RAG-Drift_Detection/actions/workflows/ci.yml/badge.svg)
+[![CI](https://github.com/Shravya29M/RAG-Drift_Detection/actions/workflows/ci.yml/badge.svg)](https://github.com/Shravya29M/RAG-Drift_Detection/actions/workflows/ci.yml)
+![coverage](https://img.shields.io/badge/coverage-%E2%89%A595%25-brightgreen)
+![mypy](https://img.shields.io/badge/mypy-strict-blue)
+![Python](https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white)
 
  Most RAG portfolio projects stop right after deployment. This one focuses on what happens after it goes live.
  
@@ -160,6 +163,34 @@ The per-window false-positive rate landing at the configured significance level 
 3. Hit `POST /drift/simulate?windows=3` (or the **simulate drift** button in the UI). Off-topic traffic drifts three consecutive windows *and* scores poorly against the corpus, so the quality gate opens one AUTO remediation incident. Review it with `GET /remediations`, ingest documents that cover the demand, then resolve it as `content_ingested`. Ingestion refreshes the drift snapshot and starts a new calibration window. `GET /drift` and `GET /metrics` show every step, including per-window mean retrieval scores and open remediation count.
 
 The FAISS index is persisted to `index/` after every write and restored on startup, so restarts lose nothing.
+
+## Tests and CI
+
+```bash
+pip install -r requirements.txt && pip install ruff mypy pytest pytest-cov
+pytest                    # runs with coverage; fails under 95%
+ruff check . && ruff format --check .
+mypy --strict rag/
+```
+
+**395 tests, 97% branch coverage**, all four gates enforced in CI on every push and PR.
+
+- `tests/unit/` covers each layer in isolation: chunking, parsers, the FAISS store, the PCA +
+  KS-test drift detector, hysteresis and recalibration in the scheduler, alarm escalation
+  levels, and settings loading (every config block is asserted to round-trip, and env-var
+  precedence over YAML is pinned).
+- `tests/integration/` drives the FastAPI app through `TestClient` against a mock encoder and
+  store, so retrieval, ingestion jobs, re-index, remediation transitions and the drift
+  simulation endpoint are all exercised without downloading a model.
+- `tests/eval/` is the reproducible retrieval evaluation behind the numbers in
+  [Eval results](#eval-results).
+
+The one deliberate gap is the FastAPI lifespan startup, which constructs a real
+`SentenceTransformerEncoder`; covering it would mean downloading model weights in CI.
+
+Dependency updates come through Renovate (`renovate.json`). The ML and vector stack (torch,
+faiss, sentence-transformers, numpy, scipy) is excluded from automerge and labelled
+`needs-eval-rerun`, since those bumps can move retrieval quality without failing a test.
 
 ## Deployment
 
