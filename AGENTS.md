@@ -111,6 +111,27 @@ covering it means downloading model weights in CI. Everything else in `api.py` i
 through `TestClient` against the mock encoder/store harness in `tests/integration/test_api.py`
 (import `_make_state`, `_make_chunk`, `DIM` from there rather than rebuilding it).
 
+## Pinned dependency: `anthropic < 1`
+
+`requirements.txt` pins `anthropic>=0.50,<1`. The 1.x SDK removed `temperature` from the
+`messages.create` overloads — Anthropic dropped sampling parameters (`temperature`, `top_p`,
+`top_k`) on current models, where they now return a 400. `AnthropicRouter.complete`
+(`rag/generation/llm.py:94`) passes `temperature=self._config.temperature`, so it fails
+`mypy --strict` against 1.x.
+
+The pin holds behavior exactly as-is. Migrating to 1.x is a real decision, not a mechanical
+fix, because it changes generation behavior:
+
+- The configured default model is `claude-opus-4-6` (`config/default.yaml:28`), which still
+  *accepts* `temperature` at the API level — but the 1.x SDK no longer types it, so you would
+  need `extra_body` (ugly) or to drop the parameter.
+- `GenerationConfig.temperature` is also consumed by the OpenAI and Groq routers, where it
+  remains valid. Dropping it only from the Anthropic path leaves a confusing half-state.
+- 1.x is also a broader migration: it moves from `httpx` to `httpx2`.
+
+Renovate will raise the 1.x bump as a standalone `major-update` PR with a 7-day soak. Decide
+the `temperature` question there rather than letting the bump land silently.
+
 ## Gotchas
 
 - `_start_drift_monitor` needs a snapshot of **at least 2 embeddings**. A store with one chunk

@@ -1,6 +1,10 @@
 APScheduler>=3.10,<4
 groq>=1.1
-anthropic>=0.50
+# Pinned below 1.0: the 1.x SDK removed `temperature` from the
+# messages.create overloads (Anthropic dropped sampling params on current
+# models), so rag/generation/llm.py fails mypy --strict against it.
+# Renovate will raise the 1.x major separately — see AGENTS.md.
+anthropic>=0.50,<1
 faiss-cpu>=1.7
 fastapi>=0.100
 httpx>=0.25
