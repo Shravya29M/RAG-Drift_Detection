@@ -15,6 +15,7 @@ Uses the repo's own DriftDetector/DistributionSnapshot with default config
 (window=50, alpha=0.05, pca=32, hysteresis=3) and its default encoder
 (all-MiniLM-L6-v2). No LLM calls; embeddings only.
 """
+
 import json
 import random
 import sys
@@ -23,18 +24,18 @@ from collections import defaultdict
 import numpy as np
 
 sys.path.insert(0, ".")  # run from repo root
+from datasets import load_dataset
+from sentence_transformers import SentenceTransformer
+
 from rag.drift.detector import DriftDetector
 from rag.drift.snapshot import DistributionSnapshot
 from rag.models import DriftConfig
 
-from datasets import load_dataset
-from sentence_transformers import SentenceTransformer
-
 SEED = 3407
 N_TRIALS = 20
-CLEAN_WINDOWS = 10          # in-distribution windows fed after baseline
-MAX_SHIFT_WINDOWS = 6       # detection budget after the shift
-TITLES_PER_SIDE = 6         # articles per topic set
+CLEAN_WINDOWS = 10  # in-distribution windows fed after baseline
+MAX_SHIFT_WINDOWS = 6  # detection budget after the shift
+TITLES_PER_SIDE = 6  # articles per topic set
 OUT = sys.argv[1] if len(sys.argv) > 1 else "drift_benchmark_results.json"
 
 print("Loading SQuAD validation split...", flush=True)
@@ -48,9 +49,12 @@ for row in ds:
 cfg = DriftConfig()
 need_q = cfg.window_size * (1 + CLEAN_WINDOWS)  # per A-side
 titles = sorted(t for t, v in by_title.items() if len(v["questions"]) >= 80)
-print(f"{len(titles)} titles with >=80 questions; window={cfg.window_size}, "
-      f"alpha={cfg.threshold_alpha}, pca={cfg.pca_components}, "
-      f"hysteresis={cfg.hysteresis_windows}", flush=True)
+print(
+    f"{len(titles)} titles with >=80 questions; window={cfg.window_size}, "
+    f"alpha={cfg.threshold_alpha}, pca={cfg.pca_components}, "
+    f"hysteresis={cfg.hysteresis_windows}",
+    flush=True,
+)
 
 print("Loading encoder all-MiniLM-L6-v2...", flush=True)
 enc = SentenceTransformer("all-MiniLM-L6-v2")
@@ -72,21 +76,22 @@ for trial in range(N_TRIALS):
     a_queries = np.vstack([emb_cache_q[t] for t in side_a])
     b_queries = np.vstack([emb_cache_q[t] for t in side_b])
     a_idx = rng.sample(range(len(a_queries)), min(need_q, len(a_queries)))
-    b_idx = rng.sample(range(len(b_queries)),
-                       min(cfg.window_size * MAX_SHIFT_WINDOWS, len(b_queries)))
+    b_idx = rng.sample(
+        range(len(b_queries)), min(cfg.window_size * MAX_SHIFT_WINDOWS, len(b_queries))
+    )
 
     snapshot = DistributionSnapshot(corpus_vecs, cfg)
     det = DriftDetector(snapshot, cfg)
 
     # baseline calibration window
-    for i in a_idx[:cfg.window_size]:
+    for i in a_idx[: cfg.window_size]:
         det.add_query_embedding(a_queries[i])
     assert det.baseline_ready
 
     # clean in-distribution windows
     false_alarms = 0
     clean_fed = 0
-    for i in a_idx[cfg.window_size:]:
+    for i in a_idx[cfg.window_size :]:
         r = det.add_query_embedding(a_queries[i])
         clean_fed += 1
         if r is not None and r.drifted:
@@ -99,7 +104,7 @@ for trial in range(N_TRIALS):
     windows_to_detect = None
     windows_to_alarm = None
     shift_windows = 0
-    for n, i in enumerate(b_idx):
+    for i in b_idx:
         r = det.add_query_embedding(b_queries[i])
         if r is not None:
             shift_windows += 1
@@ -110,14 +115,23 @@ for trial in range(N_TRIALS):
         if shift_windows >= MAX_SHIFT_WINDOWS:
             break
 
-    trials.append({
-        "trial": trial, "titles_a": side_a, "titles_b": side_b,
-        "clean_windows": clean_windows_run, "false_alarms": false_alarms,
-        "windows_to_detect": windows_to_detect, "windows_to_alarm": windows_to_alarm,
-    })
-    print(f"trial {trial+1}/{N_TRIALS}: clean_windows={clean_windows_run} "
-          f"false_alarms={false_alarms} detect_in={windows_to_detect} "
-          f"alarm_in={windows_to_alarm}", flush=True)
+    trials.append(
+        {
+            "trial": trial,
+            "titles_a": side_a,
+            "titles_b": side_b,
+            "clean_windows": clean_windows_run,
+            "false_alarms": false_alarms,
+            "windows_to_detect": windows_to_detect,
+            "windows_to_alarm": windows_to_alarm,
+        }
+    )
+    print(
+        f"trial {trial + 1}/{N_TRIALS}: clean_windows={clean_windows_run} "
+        f"false_alarms={false_alarms} detect_in={windows_to_detect} "
+        f"alarm_in={windows_to_alarm}",
+        flush=True,
+    )
 
 total_clean = sum(t["clean_windows"] for t in trials)
 total_fa = sum(t["false_alarms"] for t in trials)
@@ -125,18 +139,23 @@ detected = [t for t in trials if t["windows_to_detect"] is not None]
 alarmed = [t for t in trials if t["windows_to_alarm"] is not None]
 ttd = sorted(t["windows_to_detect"] for t in detected)
 summary = {
-    "config": {"window_size": cfg.window_size, "alpha": cfg.threshold_alpha,
-               "pca_components": cfg.pca_components,
-               "hysteresis_windows": cfg.hysteresis_windows,
-               "encoder": "all-MiniLM-L6-v2", "dataset": "rajpurkar/squad validation",
-               "n_trials": N_TRIALS, "seed": SEED},
+    "config": {
+        "window_size": cfg.window_size,
+        "alpha": cfg.threshold_alpha,
+        "pca_components": cfg.pca_components,
+        "hysteresis_windows": cfg.hysteresis_windows,
+        "encoder": "all-MiniLM-L6-v2",
+        "dataset": "rajpurkar/squad validation",
+        "n_trials": N_TRIALS,
+        "seed": SEED,
+    },
     "clean_windows_total": total_clean,
     "false_alarm_windows": total_fa,
     "false_alarm_rate": total_fa / total_clean if total_clean else None,
     "detection_rate": len(detected) / N_TRIALS,
     "alarm_rate_within_budget": len(alarmed) / N_TRIALS,
-    "median_windows_to_detect": ttd[len(ttd)//2] if ttd else None,
-    "median_queries_to_detect": ttd[len(ttd)//2] * cfg.window_size if ttd else None,
+    "median_windows_to_detect": ttd[len(ttd) // 2] if ttd else None,
+    "median_queries_to_detect": ttd[len(ttd) // 2] * cfg.window_size if ttd else None,
     "trials": trials,
 }
 with open(OUT, "w") as f:
