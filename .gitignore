@@ -16,3 +16,8 @@ index/
 data/
 .env
 wandb/
+
+# Coverage
+.coverage
+coverage.xml
+htmlcov/
