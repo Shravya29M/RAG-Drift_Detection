@@ -31,7 +31,7 @@ class DriftScheduler:
       - ``AUTO``  when ``detector.reindex_triggered`` is ``True``
       - ``SOFT``  otherwise (single drifted window or clean window)
 
-    * Per CLAUDE.md APScheduler jobs run in a thread pool — the detector and
+    * APScheduler jobs run in a thread pool — the detector and
       alarm must therefore be thread-safe for external read access, but this
       scheduler is the *only* writer, so no additional locking is needed here.
 

@@ -48,7 +48,7 @@ class DriftDetector:
         config: Drift detection configuration.
 
     Notes:
-        Per CLAUDE.md this class is **not** a singleton. The APScheduler job
+        This class is **not** a singleton. The APScheduler job
         holds the instance; do not store it as a module-level global.
     """
 
