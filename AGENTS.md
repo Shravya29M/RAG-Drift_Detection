@@ -250,3 +250,10 @@ Renovate (`renovate.json`): weekly Monday. The ML/vector stack (torch, faiss, se
 numpy, scipy, scikit-learn) is excluded from automerge, gets its own PR each, and is labelled
 `needs-eval-rerun` — those bumps can move retrieval quality without failing a test, so rerun the
 eval and the drift benchmark before merging. Requires the Renovate GitHub App on the repo.
+
+`sentence-transformers` is pinned (`==6.1.0`, 2026-09-28): unpinned, CI resolved 6.1.0 while dev
+had 5.4.0, and 6.x changed `max_seq_length` to `int | None`, which broke `mypy --strict`.
+Verified with Renovate's own rule engine: bumps of the pin still arrive as standalone PRs labelled
+`dependencies`, `ml-stack`, `needs-eval-rerun` (+ `major-update` for majors), no automerge,
+14-day minimum release age. Before merging one, rerun the eval, the drift benchmark and
+`benchmarks/run_cache_replica_benchmark.sh` — the tokenizer limit feeds chunk sizing.

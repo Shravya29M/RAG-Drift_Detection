@@ -18,7 +18,10 @@ PyYAML>=6.0
 prometheus_client>=0.20
 pydantic>=2.0
 scipy>=1.11
-sentence-transformers>=2.2
+# Pinned: an unpinned resolve pulled 6.1.0 into CI while dev had 5.4.0, and 6.x
+# changed max_seq_length to int | None (broke mypy --strict). Bumps come from
+# Renovate as standalone `needs-eval-rerun` PRs — rerun the eval and benchmarks.
+sentence-transformers==6.1.0
 torch>=2.0
 uvicorn[standard]>=0.23
 wandb>=0.16
