@@ -201,3 +201,9 @@ class TestTokenizerExposure:
         enc = _make_encoder(mock_st)
         assert enc.max_input_tokens == 254
         assert enc.tokenizer is mock_st.tokenizer
+
+    def test_model_without_a_limit_falls_back_to_the_tokenizer(self, mock_st: MagicMock) -> None:
+        mock_st.max_seq_length = None
+        mock_st.tokenizer.num_special_tokens_to_add.return_value = 2
+        mock_st.tokenizer.model_max_length = 512
+        assert _make_encoder(mock_st).max_input_tokens == 510

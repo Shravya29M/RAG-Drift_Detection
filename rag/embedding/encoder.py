@@ -79,10 +79,15 @@ class SentenceTransformerEncoder(Encoder):
         """``max_seq_length`` minus [CLS]/[SEP]: 254 for all-MiniLM-L6-v2.
 
         Deliberately not ``tokenizer.model_max_length`` — for this model that
-        reports 512 while the model itself truncates at 256.
+        reports 512 while the model itself truncates at 256. Only when the
+        model sets no limit (sentence-transformers 6 types it ``int | None``)
+        is the tokenizer's the one that applies.
         """
         specials = int(self._model.tokenizer.num_special_tokens_to_add(pair=False))
-        return int(self._model.max_seq_length) - specials
+        max_len = self._model.max_seq_length
+        if max_len is None:
+            max_len = self._model.tokenizer.model_max_length
+        return int(max_len) - specials
 
     def encode(self, texts: list[str]) -> np.ndarray:
         """Encode *texts* and return L2-normalised embeddings.
