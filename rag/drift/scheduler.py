@@ -10,7 +10,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from rag.drift.alarm import AlarmLevel, DriftAlarm
-from rag.drift.detector import DriftDetector
+from rag.drift.detector import DriftMonitor
 from rag.models import DriftConfig
 
 
@@ -24,7 +24,8 @@ class DriftScheduler:
       :meth:`enqueue_embedding`.  The method is non-blocking and thread-safe.
     * A single APScheduler ``IntervalTrigger`` job wakes every
       ``config.drift_check_interval_s`` seconds, drains the queue, and feeds
-      each vector to the :class:`~rag.drift.detector.DriftDetector`.
+      the batch to the :class:`~rag.drift.detector.DriftMonitor` — either the
+      in-process detector or the Redis-backed shared one.
     * When the detector returns a :class:`~rag.models.DriftResult` (window
       full), the alarm level is chosen:
 
@@ -36,7 +37,7 @@ class DriftScheduler:
       scheduler is the *only* writer, so no additional locking is needed here.
 
     Args:
-        detector: Pre-configured :class:`~rag.drift.detector.DriftDetector`.
+        detector: Any :class:`~rag.drift.detector.DriftMonitor`.
         alarm: :class:`~rag.drift.alarm.DriftAlarm` used to fire alerts.
         config: Drift configuration; ``drift_check_interval_s`` controls the
             scheduler tick rate.
@@ -46,7 +47,7 @@ class DriftScheduler:
 
     def __init__(
         self,
-        detector: DriftDetector,
+        detector: DriftMonitor,
         alarm: DriftAlarm,
         config: DriftConfig,
         *,
@@ -153,17 +154,18 @@ class DriftScheduler:
         - ``SOFT`` for a single drifted window or a clean window
         """
         with self._tick_lock:
+            batch: list[tuple[np.ndarray, float | None]] = []
             while True:
                 try:
-                    embedding, top_score = self._embedding_queue.get_nowait()
+                    batch.append(self._embedding_queue.get_nowait())
                 except queue.Empty:
                     break
+            if not batch:
+                return
 
-                result = self._detector.add_query_embedding(embedding, top_score)
-                if result is None:
-                    continue
-
-                if self._detector.reindex_triggered:
+            for outcome in self._detector.add_query_embeddings(batch):
+                result = outcome.result
+                if outcome.reindex_triggered:
                     level = AlarmLevel.AUTO
                 elif result.recalibrated:
                     level = AlarmLevel.HARD

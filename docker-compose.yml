@@ -1,17 +1,94 @@
+# Redis + 3 API replicas behind an nginx round-robin load balancer.
+#
+#   http://localhost:8000          load balancer (use this for traffic)
+#   http://localhost:8001..8003    individual replicas (per-replica /metrics, /drift)
+#
+# All replicas mount the same index directory. The index file there is the
+# source of truth; Redis carries the current index version, the query cache,
+# the shared drift windows/hysteresis state, and remediation incidents.
+
+x-api: &api
+  image: rag-drift-api:local
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    REDIS_URL: redis://redis:6379/0
+    HF_HOME: /models
+  volumes:
+    - ./data:/app/data
+    - ${INDEX_DIR:-./index}:/app/index
+    - hf-cache:/models
+  depends_on:
+    redis:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+    interval: 10s
+    timeout: 5s
+    start_period: 120s
+    retries: 5
+  restart: unless-stopped
+
 services:
-  api:
+  redis:
+    image: redis:7-alpine
+    # AOF keeps shared drift state and incidents across a Redis restart.
+    # volatile-ttl evicts the shortest-lived keys first under memory pressure:
+    # cache entries (1 h) go long before drift state (7 d idle expiry).
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - 512mb
+      - --maxmemory-policy
+      - volatile-ttl
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # api1 builds the shared image; api2/api3 run the same image.
+  api1:
+    <<: *api
     build: .
     ports:
-      - "8000:8000"
-    env_file:
-      - .env
+      - "8001:8000"
+
+  api2:
+    <<: *api
+    pull_policy: never
+    ports:
+      - "8002:8000"
+
+  api3:
+    <<: *api
+    pull_policy: never
+    ports:
+      - "8003:8000"
+
+  lb:
+    image: nginx:1.27-alpine
     volumes:
-      - ./data:/app/data
-      - ./index:/app/index
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
-      interval: 10s
-      timeout: 5s
-      start_period: 15s
-      retries: 5
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8000:80"
+    depends_on:
+      api1:
+        condition: service_healthy
+      api2:
+        condition: service_healthy
+      api3:
+        condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  redis-data:
+  hf-cache:

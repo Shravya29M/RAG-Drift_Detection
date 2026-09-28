@@ -234,3 +234,76 @@ class TestRetrieverTrimAndFilter:
         ret, _, _ = _make_retriever(raw)
         r = ret.retrieve("q", k=5)
         assert [c.id for c in r.chunks] == ["c0", "c1", "c2", "c3", "c4"]
+
+
+# ---------------------------------------------------------------------------
+# Shared query cache
+# ---------------------------------------------------------------------------
+
+
+class TestCache:
+    def _cached(
+        self, results: list[SearchResult], version: str = "v1"
+    ) -> tuple[Retriever, MagicMock, MagicMock, dict[str, str]]:
+        import fakeredis
+
+        from rag.cache.query_cache import QueryCache
+        from rag.redis_health import RedisHealth
+
+        enc = MagicMock()
+        enc.encode.return_value = np.array([_unit_vec()], dtype=np.float32)
+        store = MagicMock()
+        store.search.return_value = results
+        current = {"version": version}
+        retriever = Retriever(
+            store,
+            enc,
+            cache=QueryCache(RedisHealth(fakeredis.FakeRedis())),
+            index_version=lambda: current["version"],
+        )
+        return retriever, store, enc, current
+
+    def test_miss_populates_and_equivalent_query_hits(self) -> None:
+        retriever, store, enc, _ = self._cached([_sr(_chunk("a"), 0.8)])
+        first = retriever.retrieve("What is drift?", k=3)
+        second = retriever.retrieve("  what is DRIFT? ", k=3)
+        assert first.cache_hit is False and second.cache_hit is True
+        assert [c.id for c in second.chunks] == ["a"]
+        assert second.scores == first.scores
+        assert second.query_embedding == pytest.approx(first.query_embedding)
+        assert enc.encode.call_count == 1
+        assert store.search.call_count == 1
+
+    def test_different_k_or_filters_do_not_share_entries(self) -> None:
+        retriever, store, _, _ = self._cached([_sr(_chunk("a"))])
+        retriever.retrieve("q", k=3)
+        retriever.retrieve("q", k=4)
+        retriever.retrieve("q", k=3, filters={"source": "doc.txt"})
+        assert store.search.call_count == 3
+
+    def test_index_version_change_invalidates(self) -> None:
+        retriever, store, _, current = self._cached([_sr(_chunk("a"))])
+        retriever.retrieve("q", k=3)
+        current["version"] = "v2"
+        assert retriever.retrieve("q", k=3).cache_hit is False
+        assert store.search.call_count == 2
+
+    def test_cache_without_version_source_is_ignored(self) -> None:
+        import fakeredis
+
+        from rag.cache.query_cache import QueryCache
+        from rag.redis_health import RedisHealth
+
+        enc = MagicMock()
+        enc.encode.return_value = np.array([_unit_vec()], dtype=np.float32)
+        store = MagicMock()
+        store.search.return_value = []
+        retriever = Retriever(store, enc, cache=QueryCache(RedisHealth(fakeredis.FakeRedis())))
+        retriever.retrieve("q", k=1)
+        assert retriever.retrieve("q", k=1).cache_hit is False
+
+    def test_uncached_result_still_returns_the_embedding(self) -> None:
+        retriever, _, _ = _make_retriever([])
+        result = retriever.retrieve("q", k=1)
+        assert result.query_embedding == pytest.approx(_unit_vec().tolist())
+        assert "query_embedding" not in result.model_dump()

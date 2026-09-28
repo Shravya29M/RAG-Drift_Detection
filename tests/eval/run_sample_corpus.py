@@ -65,6 +65,7 @@ def _load_labels() -> list[Label]:
 
 
 def _build_retriever() -> tuple[Retriever, Encoder]:
+    encoder = SentenceTransformerEncoder("sentence-transformers/all-MiniLM-L6-v2")
     chunks = []
     for path in sorted(SAMPLES.glob("*.md")):
         for section in parse_markdown(path):
@@ -73,11 +74,12 @@ def _build_retriever() -> tuple[Retriever, Encoder]:
                     section,
                     path.name,
                     SourceType.MARKDOWN,
-                    IngestConfig(chunk_size=512, chunk_overlap=64),
+                    IngestConfig(),  # production defaults, sized in model tokens
                     file_path=path,
+                    tokenizer=encoder.tokenizer,
+                    max_tokens=encoder.max_input_tokens,
                 )
             )
-    encoder = SentenceTransformerEncoder("sentence-transformers/all-MiniLM-L6-v2")
     store = FAISSStore(encoder.dim)
     store.add(chunks, encoder.encode([chunk.text for chunk in chunks]))
     return Retriever(store, encoder), encoder

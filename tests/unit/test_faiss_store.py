@@ -382,3 +382,80 @@ class TestPersistence:
         path = tmp_path / "faiss.index"
         store.save(path)
         assert not (tmp_path / "faiss.index.tmp").exists()
+
+
+# ---------------------------------------------------------------------------
+# Snapshot identity (drives the shared index version)
+# ---------------------------------------------------------------------------
+
+
+class TestSnapshotIdentity:
+    def test_every_mutation_mints_a_new_snapshot(self) -> None:
+        store = FAISSStore(dim=DIM)
+        ids = [store.snapshot_id]
+        store.add([_make_chunk("a"), _make_chunk("b")], _random_unit_vecs(2))
+        ids.append(store.snapshot_id)
+        store.delete(["a"])
+        ids.append(store.snapshot_id)
+        store.swap_index([_make_chunk("c")], _random_unit_vecs(1))
+        ids.append(store.snapshot_id)
+        assert len(set(ids)) == len(ids)
+
+    def test_no_op_mutations_keep_the_snapshot(self) -> None:
+        store = FAISSStore(dim=DIM)
+        store.add([_make_chunk("a")], _random_unit_vecs(1))
+        before = store.snapshot_id
+        store.add([], np.empty((0, DIM), dtype=np.float32))
+        store.delete(["missing"])
+        assert store.snapshot_id == before
+
+    def test_fingerprint_is_memoised_and_tracks_mutations(self) -> None:
+        store = FAISSStore(dim=DIM)
+        store.add([_make_chunk("a")], _random_unit_vecs(1))
+        fp = store.content_fingerprint()
+        assert store.content_fingerprint() == fp
+        store.add([_make_chunk("b")], _random_unit_vecs(1, seed=1))
+        assert store.content_fingerprint() != fp
+
+    def test_same_snapshot_and_chunks_give_same_fingerprint(self) -> None:
+        a, b = FAISSStore(dim=DIM), FAISSStore(dim=DIM)
+        vecs = _random_unit_vecs(2)
+        a.swap_index([_make_chunk("x"), _make_chunk("y")], vecs, snapshot_id="s1")
+        b.swap_index([_make_chunk("y"), _make_chunk("x")], vecs[::-1], snapshot_id="s1")
+        assert a.content_fingerprint() == b.content_fingerprint()
+        b.swap_index([_make_chunk("y"), _make_chunk("x")], vecs[::-1], snapshot_id="s2")
+        assert a.content_fingerprint() != b.content_fingerprint()
+
+    def test_snapshot_survives_save_and_load(self, tmp_path: Path) -> None:
+        src = FAISSStore(dim=DIM)
+        src.add([_make_chunk("a"), _make_chunk("b")], _random_unit_vecs(2))
+        src.save(tmp_path / "idx")
+        replica = FAISSStore(dim=DIM)
+        assert replica.load(tmp_path / "idx")
+        assert replica.snapshot_id == src.snapshot_id
+        assert replica.content_fingerprint() == src.content_fingerprint()
+
+    def test_legacy_bundle_without_snapshot_gets_a_stable_id(self, tmp_path: Path) -> None:
+        import json
+
+        path = tmp_path / "legacy"
+        chunk = _make_chunk("a")
+        with path.open("wb") as fh:
+            np.savez(
+                fh,
+                vectors=_random_unit_vecs(1),
+                chunks_json=np.array(json.dumps([chunk.model_dump(mode="json")])),
+            )
+        a, b = FAISSStore(dim=DIM), FAISSStore(dim=DIM)
+        a.load(path)
+        b.load(path)
+        assert a.snapshot_id == b.snapshot_id == "legacy"
+
+    def test_base_fingerprint_hashes_sorted_chunk_ids(self) -> None:
+        class _Listing(FAISSStore):
+            content_fingerprint = VectorStore.content_fingerprint
+
+        a, b = _Listing(dim=DIM), _Listing(dim=DIM)
+        a.add([_make_chunk("x"), _make_chunk("y")], _random_unit_vecs(2))
+        b.add([_make_chunk("y"), _make_chunk("x")], _random_unit_vecs(2))
+        assert a.content_fingerprint() == b.content_fingerprint()

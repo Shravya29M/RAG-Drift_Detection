@@ -19,6 +19,8 @@ def isolate_env(monkeypatch, tmp_path):
     """Keep the developer's real .env and config out of these tests."""
     monkeypatch.delenv("QDRANT_URL", raising=False)
     monkeypatch.delenv("DRIFT_WEBHOOK_URL", raising=False)
+    monkeypatch.delenv("REDIS_URL", raising=False)
+    monkeypatch.delenv("QUERY_CACHE_ENABLED", raising=False)
     monkeypatch.chdir(tmp_path)
 
 
@@ -91,6 +93,8 @@ def test_every_config_block_is_wired_up(tmp_path):
                 "drift_check_interval_seconds": defaults.scheduler.drift_check_interval_seconds + 1
             },
             "alarm": {"webhook_url": "https://example.test/hook"},
+            "redis": {"url": "redis://yaml:6379/0"},
+            "cache": {"ttl_s": 42},
         },
     )
     settings = load_settings(path)
@@ -104,6 +108,8 @@ def test_every_config_block_is_wired_up(tmp_path):
         == defaults.scheduler.drift_check_interval_seconds + 1
     )
     assert settings.alarm.webhook_url == "https://example.test/hook"
+    assert settings.redis.url == "redis://yaml:6379/0"
+    assert settings.cache.ttl_s == 42
 
 
 def test_a_partial_block_keeps_defaults_for_the_rest(tmp_path):
@@ -155,3 +161,37 @@ def test_an_empty_env_override_does_not_blank_the_config_value(tmp_path, monkeyp
 def test_env_overrides_apply_even_without_a_config_file(tmp_path, monkeypatch):
     monkeypatch.setenv("QDRANT_URL", "http://from-env")
     assert load_settings(tmp_path / "absent.yaml").vector_store.qdrant_url == "http://from-env"
+
+
+def test_redis_is_disabled_by_default(tmp_path):
+    settings = load_settings(tmp_path / "absent.yaml")
+    assert settings.redis.url == ""
+    assert settings.cache.enabled is True
+
+
+def test_redis_url_env_var_overrides_the_config_file(tmp_path, monkeypatch):
+    path = write_config(tmp_path, {"redis": {"url": "redis://yaml:6379/0"}})
+    monkeypatch.setenv("REDIS_URL", "redis://env:6379/1")
+    assert load_settings(path).redis.url == "redis://env:6379/1"
+
+
+def test_an_empty_redis_url_env_does_not_blank_the_config_value(tmp_path, monkeypatch):
+    path = write_config(tmp_path, {"redis": {"url": "redis://yaml:6379/0"}})
+    monkeypatch.setenv("REDIS_URL", "")
+    assert load_settings(path).redis.url == "redis://yaml:6379/0"
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [("false", False), ("0", False), (" No ", False), ("true", True), ("1", True)],
+)
+def test_query_cache_enabled_env_var(tmp_path, monkeypatch, raw, expected):
+    path = write_config(tmp_path, {"cache": {"enabled": not expected}})
+    monkeypatch.setenv("QUERY_CACHE_ENABLED", raw)
+    assert load_settings(path).cache.enabled is expected
+
+
+def test_an_empty_cache_env_keeps_the_config_value(tmp_path, monkeypatch):
+    path = write_config(tmp_path, {"cache": {"enabled": False}})
+    monkeypatch.setenv("QUERY_CACHE_ENABLED", "")
+    assert load_settings(path).cache.enabled is False

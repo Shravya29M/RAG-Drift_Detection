@@ -1,0 +1,1 @@
+"""Shared Redis query cache."""

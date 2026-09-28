@@ -1,0 +1,520 @@
+{
+  "ingest": {
+    "job_id": "3dd6801b-7998-41b8-a612-c83ba96813ef",
+    "job_status_per_replica": {
+      "http://localhost:8001": "done",
+      "http://localhost:8002": "done",
+      "http://localhost:8003": "done"
+    },
+    "job_record_identical_on_all_replicas": true,
+    "job_lookups_via_lb_status_codes": [
+      200,
+      200,
+      200,
+      200,
+      200,
+      200,
+      200,
+      200,
+      200
+    ],
+    "chunks_in_persisted_index": 13698,
+    "chunk_tokens_with_specials_max": 202,
+    "chunk_tokens_with_specials_p50": 202,
+    "chunks_over_model_max_seq_length_256": 0,
+    "files_uploaded": 380,
+    "bytes_uploaded": 8082750,
+    "ingested_by": "172.19.0.4:8000",
+    "chunk_count_per_replica": {
+      "http://localhost:8001": 13698,
+      "http://localhost:8002": 13698,
+      "http://localhost:8003": 13698
+    },
+    "index_version_per_replica": {
+      "http://localhost:8001": "ad7925667dd1c8cc",
+      "http://localhost:8002": "ad7925667dd1c8cc",
+      "http://localhost:8003": "ad7925667dd1c8cc"
+    },
+    "seconds_until_all_replicas_converged": 195.5,
+    "note": "includes parsing, chunking and embedding on the ingesting replica"
+  },
+  "http_cache_on": {
+    "query_mix": {
+      "requests": 3000,
+      "distinct_base_queries": 500,
+      "zipf_exponent": 1.0,
+      "variant_fraction": 0.2,
+      "seed": 7,
+      "unique_after_normalisation": 412,
+      "ideal_hit_rate": 0.8627
+    },
+    "warmup_requests_excluded": 20,
+    "cache_keys_flushed_before_run": 0,
+    "client_latency": {
+      "n": 3000,
+      "p50_ms": 1.262,
+      "p95_ms": 30.055,
+      "mean_ms": 4.318
+    },
+    "requests_per_replica": {
+      "172.19.0.4:8000": 1000,
+      "172.19.0.3:8000": 1000,
+      "172.19.0.5:8000": 1000
+    },
+    "cache_hits_per_replica": {
+      "http://localhost:8001": 871.0,
+      "http://localhost:8002": 858.0,
+      "http://localhost:8003": 859.0
+    },
+    "cache_misses_per_replica": {
+      "http://localhost:8001": 129.0,
+      "http://localhost:8002": 142.0,
+      "http://localhost:8003": 141.0
+    },
+    "cache_bypassed_total": 0.0,
+    "measured_hit_rate": 0.8627,
+    "note": "sequential client, keyless (extractive) generation; end-to-end /query"
+  },
+  "drift_replicas": {
+    "replicas": 3,
+    "trials": 5,
+    "window_size": 50,
+    "clean_windows": 2,
+    "shifted_windows": 4,
+    "trials_detected": 5,
+    "trials_escalated": 5,
+    "trials_identical_on_all_replicas": 5,
+    "median_first_drifted_window": 1,
+    "per_trial": [
+      {
+        "trial": 1,
+        "identical_drift_state_on_all_replicas": true,
+        "identical_remediations_on_all_replicas": true,
+        "identical_job_record_on_all_replicas": true,
+        "clean_windows_drifted": [
+          false,
+          false
+        ],
+        "shift_windows_drifted": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "shift_windows_quality_degraded": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "baseline_mean_score": 0.5940299659967423,
+        "shift_mean_scores": [
+          0.2435,
+          0.2495,
+          0.2514,
+          0.2533
+        ],
+        "first_drifted_window_after_shift": 1,
+        "reindex_triggered": true,
+        "open_remediations": 1,
+        "remediation_occurrences": [
+          2
+        ],
+        "windows_evaluated_by_replica": {
+          "http://localhost:8001": 1.0,
+          "http://localhost:8002": 3.0,
+          "http://localhost:8003": 2.0
+        },
+        "requests_per_replica": {
+          "172.19.0.3:8000": 117,
+          "172.19.0.5:8000": 117,
+          "172.19.0.4:8000": 116
+        },
+        "seconds": 89.3
+      },
+      {
+        "trial": 2,
+        "identical_drift_state_on_all_replicas": true,
+        "identical_remediations_on_all_replicas": true,
+        "identical_job_record_on_all_replicas": true,
+        "clean_windows_drifted": [
+          false,
+          false
+        ],
+        "shift_windows_drifted": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "shift_windows_quality_degraded": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "baseline_mean_score": 0.5894691890478134,
+        "shift_mean_scores": [
+          0.2597,
+          0.239,
+          0.2528,
+          0.2421
+        ],
+        "first_drifted_window_after_shift": 1,
+        "reindex_triggered": true,
+        "open_remediations": 1,
+        "remediation_occurrences": [
+          4
+        ],
+        "windows_evaluated_by_replica": {
+          "http://localhost:8001": 1.0,
+          "http://localhost:8002": 3.0,
+          "http://localhost:8003": 2.0
+        },
+        "requests_per_replica": {
+          "172.19.0.3:8000": 117,
+          "172.19.0.5:8000": 117,
+          "172.19.0.4:8000": 116
+        },
+        "seconds": 89.7
+      },
+      {
+        "trial": 3,
+        "identical_drift_state_on_all_replicas": true,
+        "identical_remediations_on_all_replicas": true,
+        "identical_job_record_on_all_replicas": true,
+        "clean_windows_drifted": [
+          false,
+          false
+        ],
+        "shift_windows_drifted": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "shift_windows_quality_degraded": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "baseline_mean_score": 0.6090557646751403,
+        "shift_mean_scores": [
+          0.2571,
+          0.2451,
+          0.257,
+          0.259
+        ],
+        "first_drifted_window_after_shift": 1,
+        "reindex_triggered": true,
+        "open_remediations": 1,
+        "remediation_occurrences": [
+          6
+        ],
+        "windows_evaluated_by_replica": {
+          "http://localhost:8001": 1.0,
+          "http://localhost:8002": 3.0,
+          "http://localhost:8003": 2.0
+        },
+        "requests_per_replica": {
+          "172.19.0.3:8000": 117,
+          "172.19.0.5:8000": 117,
+          "172.19.0.4:8000": 116
+        },
+        "seconds": 90.1
+      },
+      {
+        "trial": 4,
+        "identical_drift_state_on_all_replicas": true,
+        "identical_remediations_on_all_replicas": true,
+        "identical_job_record_on_all_replicas": true,
+        "clean_windows_drifted": [
+          false,
+          false
+        ],
+        "shift_windows_drifted": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "shift_windows_quality_degraded": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "baseline_mean_score": 0.6091508960723877,
+        "shift_mean_scores": [
+          0.2422,
+          0.2542,
+          0.2662,
+          0.2545
+        ],
+        "first_drifted_window_after_shift": 1,
+        "reindex_triggered": true,
+        "open_remediations": 1,
+        "remediation_occurrences": [
+          8
+        ],
+        "windows_evaluated_by_replica": {
+          "http://localhost:8001": 1.0,
+          "http://localhost:8002": 3.0,
+          "http://localhost:8003": 2.0
+        },
+        "requests_per_replica": {
+          "172.19.0.3:8000": 117,
+          "172.19.0.5:8000": 117,
+          "172.19.0.4:8000": 116
+        },
+        "seconds": 90.2
+      },
+      {
+        "trial": 5,
+        "identical_drift_state_on_all_replicas": true,
+        "identical_remediations_on_all_replicas": true,
+        "identical_job_record_on_all_replicas": true,
+        "clean_windows_drifted": [
+          true,
+          false
+        ],
+        "shift_windows_drifted": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "shift_windows_quality_degraded": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "baseline_mean_score": 0.6043987542390823,
+        "shift_mean_scores": [
+          0.2309,
+          0.2401,
+          0.2415,
+          0.2523
+        ],
+        "first_drifted_window_after_shift": 1,
+        "reindex_triggered": true,
+        "open_remediations": 1,
+        "remediation_occurrences": [
+          10
+        ],
+        "windows_evaluated_by_replica": {
+          "http://localhost:8001": 1.0,
+          "http://localhost:8002": 3.0,
+          "http://localhost:8003": 2.0
+        },
+        "requests_per_replica": {
+          "172.19.0.5:8000": 117,
+          "172.19.0.4:8000": 117,
+          "172.19.0.3:8000": 116
+        },
+        "seconds": 90.4
+      }
+    ]
+  },
+  "redis_outage": {
+    "requests_per_phase": 60,
+    "during_outage": {
+      "status_codes": {
+        "200": 60
+      },
+      "latency": {
+        "n": 60,
+        "p50_ms": 25.944,
+        "p95_ms": 34.424,
+        "mean_ms": 21.391
+      },
+      "replica_gauges": {
+        "http://localhost:8001": {
+          "rag_redis_up": 0.0,
+          "cache_errors": 0.0,
+          "cache_bypassed": 20.0
+        },
+        "http://localhost:8002": {
+          "rag_redis_up": 0.0,
+          "cache_errors": 0.0,
+          "cache_bypassed": 20.0
+        },
+        "http://localhost:8003": {
+          "rag_redis_up": 0.0,
+          "cache_errors": 0.0,
+          "cache_bypassed": 20.0
+        }
+      },
+      "redis_up": [
+        false,
+        false,
+        false
+      ]
+    },
+    "after_restart": {
+      "status_codes": {
+        "200": 60
+      },
+      "latency": {
+        "n": 60,
+        "p50_ms": 18.252,
+        "p95_ms": 33.885,
+        "mean_ms": 18.546
+      },
+      "replica_gauges": {
+        "http://localhost:8001": {
+          "rag_redis_up": 1.0,
+          "cache_errors": 0.0,
+          "cache_bypassed": 20.0
+        },
+        "http://localhost:8002": {
+          "rag_redis_up": 1.0,
+          "cache_errors": 0.0,
+          "cache_bypassed": 20.0
+        },
+        "http://localhost:8003": {
+          "rag_redis_up": 1.0,
+          "cache_errors": 0.0,
+          "cache_bypassed": 20.0
+        }
+      }
+    }
+  },
+  "http_cache_off": {
+    "query_mix": {
+      "requests": 3000,
+      "distinct_base_queries": 500,
+      "zipf_exponent": 1.0,
+      "variant_fraction": 0.2,
+      "seed": 7,
+      "unique_after_normalisation": 412,
+      "ideal_hit_rate": 0.8627
+    },
+    "warmup_requests_excluded": 20,
+    "cache_keys_flushed_before_run": 0,
+    "client_latency": {
+      "n": 3000,
+      "p50_ms": 10.923,
+      "p95_ms": 34.701,
+      "mean_ms": 17.906
+    },
+    "requests_per_replica": {
+      "172.19.0.4:8000": 1000,
+      "172.19.0.3:8000": 1000,
+      "172.19.0.5:8000": 1000
+    },
+    "cache_hits_per_replica": {
+      "http://localhost:8001": 0.0,
+      "http://localhost:8002": 0.0,
+      "http://localhost:8003": 0.0
+    },
+    "cache_misses_per_replica": {
+      "http://localhost:8001": 0.0,
+      "http://localhost:8002": 0.0,
+      "http://localhost:8003": 0.0
+    },
+    "cache_bypassed_total": 0.0,
+    "measured_hit_rate": null,
+    "note": "sequential client, keyless (extractive) generation; end-to-end /query"
+  },
+  "inprocess": {
+    "query_mix": {
+      "requests": 3000,
+      "distinct_base_queries": 500,
+      "zipf_exponent": 1.0,
+      "variant_fraction": 0.2,
+      "seed": 7,
+      "unique_after_normalisation": 412,
+      "ideal_hit_rate": 0.8627
+    },
+    "chunks_in_index": 13698,
+    "k": 5,
+    "warmup_requests_excluded": 20,
+    "runs": [
+      {
+        "repeat": 1,
+        "cache": "off",
+        "latency": {
+          "n": 3000,
+          "p50_ms": 6.765,
+          "p95_ms": 11.769,
+          "mean_ms": 7.556
+        },
+        "hit_latency": null,
+        "miss_latency": null,
+        "measured_hit_rate": null
+      },
+      {
+        "repeat": 1,
+        "cache": "on",
+        "latency": {
+          "n": 3000,
+          "p50_ms": 0.385,
+          "p95_ms": 13.985,
+          "mean_ms": 2.186
+        },
+        "hit_latency": {
+          "n": 2588,
+          "p50_ms": 0.367,
+          "p95_ms": 0.682,
+          "mean_ms": 0.395
+        },
+        "miss_latency": {
+          "n": 412,
+          "p50_ms": 13.307,
+          "p95_ms": 17.274,
+          "mean_ms": 13.431
+        },
+        "measured_hit_rate": 0.8627
+      },
+      {
+        "repeat": 2,
+        "cache": "off",
+        "latency": {
+          "n": 3000,
+          "p50_ms": 6.214,
+          "p95_ms": 11.106,
+          "mean_ms": 6.968
+        },
+        "hit_latency": null,
+        "miss_latency": null,
+        "measured_hit_rate": null
+      },
+      {
+        "repeat": 2,
+        "cache": "on",
+        "latency": {
+          "n": 3000,
+          "p50_ms": 0.353,
+          "p95_ms": 13.026,
+          "mean_ms": 2.032
+        },
+        "hit_latency": {
+          "n": 2588,
+          "p50_ms": 0.336,
+          "p95_ms": 0.646,
+          "mean_ms": 0.37
+        },
+        "miss_latency": {
+          "n": 412,
+          "p50_ms": 12.42,
+          "p95_ms": 15.959,
+          "mean_ms": 12.476
+        },
+        "measured_hit_rate": 0.8627
+      }
+    ],
+    "environment": {
+      "platform": "macOS-15.7.4-arm64-arm-64bit",
+      "machine": "arm64",
+      "python": "3.11.14",
+      "torch_threads": 1,
+      "omp_num_threads": "1",
+      "redis_version": "7.4.11",
+      "redis_url_host": "redis://localhost:6391/0"
+    },
+    "note": "latency = Retriever.retrieve wall time: encode + FAISS search (+ Redis get/put)"
+  }
+}

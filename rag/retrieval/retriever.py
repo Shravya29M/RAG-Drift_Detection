@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 
 import numpy as np
 
+from rag.cache.query_cache import CachedRetrieval, QueryCache
 from rag.embedding.encoder import Encoder
+from rag.metrics import RETRIEVAL_SECONDS
 from rag.models import RetrievalResult, SearchResult
 from rag.vector_store.base import VectorStore
 
@@ -55,6 +58,10 @@ class Retriever:
         encoder: Encoder used to embed the query string.
         score_threshold: Minimum cosine similarity score passed to the vector
             store; results below this value are discarded before filtering.
+        cache: Optional shared query cache. Requires *index_version*.
+        index_version: Returns the current index version; read *before* the
+            search so an entry can never be filed under a newer version than
+            the index that produced it.
     """
 
     def __init__(
@@ -63,10 +70,14 @@ class Retriever:
         encoder: Encoder,
         *,
         score_threshold: float = 0.0,
+        cache: QueryCache | None = None,
+        index_version: Callable[[], str] | None = None,
     ) -> None:
         self._store = store
         self._encoder = encoder
         self._score_threshold = score_threshold
+        self._cache = cache if index_version is not None else None
+        self._index_version = index_version
 
     def retrieve(
         self,
@@ -91,11 +102,35 @@ class Retriever:
                 expected value.  All predicates must hold (AND semantics).
                 Pass ``None`` or ``{}`` to skip filtering.
 
+        With a cache configured, a hit skips steps 1–4 entirely; a miss runs
+        them and stores the result. Either way ``query_embedding`` is set so
+        the caller never has to encode the query a second time.
+
         Returns:
             :class:`~rag.models.RetrievalResult` with ``chunks``, ``scores``,
-            ``latency_ms``, and ``total_candidates``.
+            ``latency_ms``, ``total_candidates``, ``cache_hit`` and
+            ``query_embedding``.
         """
         t0 = time.monotonic()
+
+        cache_key: str | None = None
+        if self._cache is not None and self._index_version is not None:
+            cache_key = self._cache.key(
+                self._index_version(), query, k, filters, self._score_threshold
+            )
+            hit = self._cache.get(cache_key)
+            if hit is not None:
+                latency_s = time.monotonic() - t0
+                RETRIEVAL_SECONDS.labels(cache="hit").observe(latency_s)
+                return RetrievalResult(
+                    query=query,
+                    chunks=hit.chunks,
+                    scores=hit.scores,
+                    latency_ms=latency_s * 1000.0,
+                    total_candidates=hit.total_candidates,
+                    cache_hit=True,
+                    query_embedding=hit.embedding.tolist(),
+                )
 
         # Encode query: encoder returns (1, dim); take the single row.
         query_vec: np.ndarray = self._encoder.encode([query])[0]
@@ -115,12 +150,29 @@ class Retriever:
         # Trim to k.
         top = filtered[:k]
 
-        latency_ms = (time.monotonic() - t0) * 1000.0
+        chunks = [r.chunk for r in top]
+        scores = [r.score for r in top]
+        if self._cache is not None and cache_key is not None:
+            self._cache.put(
+                cache_key,
+                CachedRetrieval(
+                    embedding=np.asarray(query_vec, dtype=np.float32),
+                    chunks=chunks,
+                    scores=scores,
+                    total_candidates=total_candidates,
+                ),
+            )
+
+        latency_s = time.monotonic() - t0
+        RETRIEVAL_SECONDS.labels(cache="miss" if cache_key is not None else "off").observe(
+            latency_s
+        )
 
         return RetrievalResult(
             query=query,
-            chunks=[r.chunk for r in top],
-            scores=[r.score for r in top],
-            latency_ms=latency_ms,
+            chunks=chunks,
+            scores=scores,
+            latency_ms=latency_s * 1000.0,
             total_candidates=total_candidates,
+            query_embedding=np.asarray(query_vec, dtype=np.float32).tolist(),
         )
