@@ -15,9 +15,14 @@ index/
 *.bin
 data/
 .env
+.env.*
+!.env.example
 wandb/
 
 # Coverage
 .coverage
 coverage.xml
 htmlcov/
+
+# Benchmark corpus and its index (rebuilt by benchmarks/build_docs_corpus.py)
+benchmarks/corpus/
