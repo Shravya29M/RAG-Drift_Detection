@@ -1,8 +1,8 @@
 # All tunables for the RAG-drift pipeline. Loaded once at startup into Settings.
 
 ingestion:
-  chunk_size: 512          # tokens per chunk
-  chunk_overlap: 64        # sliding window overlap
+  chunk_size: 200          # embedding-model tokens per chunk; model embeds <= 254
+  chunk_overlap: 30        # tokens (whole words) shared between neighbours
   supported_extensions: [".pdf", ".md", ".txt"]
 
 embedding:
@@ -46,6 +46,17 @@ alarm:
   webhook_url: ""          # overridden by env DRIFT_WEBHOOK_URL
   webhook_timeout_s: 5.0
   auto_remediation_cooldown_s: 3600 # prevent a resolved incident reopening immediately
+
+redis:
+  url: ""                  # overridden by env REDIS_URL; empty = single-process mode
+  socket_timeout_s: 0.5    # slow Redis degrades to local mode rather than blocking
+  retry_interval_s: 5.0    # reconnection probe interval while Redis is down
+  index_poll_interval_s: 5.0 # replicas re-check the shared index version this often
+  drift_state_ttl_s: 604800  # idle expiry of shared drift state (7 days)
+
+cache:
+  enabled: true            # overridden by env QUERY_CACHE_ENABLED
+  ttl_s: 3600              # cached embedding + top-k result lifetime
 
 logging:
   level: "INFO"

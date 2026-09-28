@@ -65,12 +65,16 @@ cd RAG-Drift_Detection
 # With no key the API runs in keyless mode (returns retrieved context verbatim).
 cp .env.example .env
 
-# Bring up the API
-docker-compose up --build -d
+# Bring up Redis + 3 API replicas behind an nginx load balancer on :8000
+# (replicas are also reachable directly on :8001-:8003 for per-replica /metrics).
+docker compose up --build -d --wait
 
 # Confirm the API is healthy
 curl http://localhost:8000/healthz
 # {"status":"ok"}
+
+# All replicas serve the same index version (shared via Redis)
+curl http://localhost:8000/index/status
 
 # A fresh instance seeds itself with the sample docs in samples/ so the
 # index and drift monitor are live immediately (disable with SEED_SAMPLE_DATA=false).
@@ -113,7 +117,8 @@ python -m rag.cli drift-status
 | `POST` | `/reindex` | — | Trigger manual re-index; re-embeds all stored chunks and swaps the FAISS index. |
 | `GET` | `/remediations` | `open_only` (optional bool) | List AUTO-created quality-degradation incidents. |
 | `POST` | `/remediations/{id}/resolve` | `{"resolution": str, "notes": str\|null}` | Record the operator’s disposition after investigation. |
-| `GET` | `/metrics` | — | Prometheus-compatible gauge/counter text for queue depth, drift state, job counts. |
+| `GET` | `/metrics` | — | Prometheus metrics for this replica: queue depth, drift state, job counts, cache hits/misses/latency, Redis health. Scrape each replica, not the load balancer. |
+| `GET` | `/index/status` | — | This replica's index version and chunk count, and the shared version in Redis. |
 
 ---
 

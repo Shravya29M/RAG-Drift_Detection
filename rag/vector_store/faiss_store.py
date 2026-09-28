@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import threading
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -33,6 +35,15 @@ class _Slot:
     """Maps int64 FAISS IDs → embedding vectors for distribution snapshot."""
     next_id: int = 0
     """Monotonically increasing int64 ID counter for this slot."""
+    snapshot_id: str = ""
+    """Identity of this exact index generation. Re-minted on every mutation and
+    persisted with the bundle, so replicas that load the same file agree on it."""
+    fingerprint: str | None = None
+    """Memoised :meth:`FAISSStore.content_fingerprint`; cleared on mutation."""
+
+
+def _new_snapshot_id() -> str:
+    return uuid.uuid4().hex
 
 
 def _new_index(dim: int) -> Any:
@@ -40,18 +51,19 @@ def _new_index(dim: int) -> Any:
     return faiss.IndexIDMap(faiss.IndexFlatIP(dim))
 
 
-def _build_slot(dim: int, chunks: list[Chunk], embeddings: np.ndarray) -> _Slot:
+def _build_slot(dim: int, chunks: list[Chunk], embeddings: np.ndarray, snapshot_id: str) -> _Slot:
     """Construct a fully-populated :class:`_Slot` from *chunks* and *embeddings*.
 
     Args:
         dim: Embedding dimensionality.
         chunks: Chunk objects to index.
         embeddings: L2-normalised float32 array of shape ``(len(chunks), dim)``.
+        snapshot_id: Identity to stamp on the new slot.
 
     Returns:
         Populated :class:`_Slot` ready to be made active.
     """
-    slot = _Slot(index=_new_index(dim))
+    slot = _Slot(index=_new_index(dim), snapshot_id=snapshot_id)
     if not chunks:
         return slot
 
@@ -106,6 +118,33 @@ class FAISSStore(VectorStore):
         """The currently active slot (read under lock by callers)."""
         return self._slots[self._active]
 
+    @staticmethod
+    def _touch(slot: _Slot) -> None:
+        """Mark *slot* as a new index generation after an in-place mutation."""
+        slot.snapshot_id = _new_snapshot_id()
+        slot.fingerprint = None
+
+    @property
+    def snapshot_id(self) -> str:
+        """Identity of the active index generation (changes on every mutation)."""
+        with self._lock:
+            return self._slot.snapshot_id
+
+    def content_fingerprint(self) -> str:
+        """Hash of the snapshot ID plus sorted chunk IDs, memoised per generation.
+
+        Deliberately does not hash vectors: O(n) over short IDs once per
+        mutation, O(1) afterwards, so it is safe to call on every query.
+        """
+        with self._lock:
+            slot = self._slot
+            if slot.fingerprint is None:
+                digest = hashlib.sha256(slot.snapshot_id.encode())
+                for cid in sorted(slot.id_map):
+                    digest.update(b"\n" + cid.encode())
+                slot.fingerprint = digest.hexdigest()
+            return slot.fingerprint
+
     # ------------------------------------------------------------------
     # VectorStore interface
     # ------------------------------------------------------------------
@@ -149,6 +188,7 @@ class FAISSStore(VectorStore):
                 slot.chunks[fid] = chunk
                 slot.vectors[fid] = vec
             slot.next_id += len(chunks)
+            self._touch(slot)
 
     def search(
         self,
@@ -217,6 +257,7 @@ class FAISSStore(VectorStore):
             if to_remove:
                 fa_ids = np.array(to_remove, dtype=np.int64)
                 slot.index.remove_ids(fa_ids)
+                self._touch(slot)
 
     def snapshot_distribution(self) -> np.ndarray:
         """Return all stored embeddings stacked into a single array.
@@ -235,7 +276,13 @@ class FAISSStore(VectorStore):
         with self._lock:
             return list(self._slot.chunks.values())
 
-    def swap_index(self, chunks: list[Chunk], embeddings: np.ndarray) -> None:
+    def swap_index(
+        self,
+        chunks: list[Chunk],
+        embeddings: np.ndarray,
+        *,
+        snapshot_id: str | None = None,
+    ) -> None:
         """Atomically replace the entire index.
 
         Builds the new index in the *inactive* slot (without holding the lock),
@@ -245,9 +292,11 @@ class FAISSStore(VectorStore):
         Args:
             chunks: Full new chunk set.
             embeddings: L2-normalised float32 array, shape ``(len(chunks), dim)``.
+            snapshot_id: Identity to adopt (used by :meth:`load`); a fresh one
+                is minted when omitted, so every swap is a new generation.
         """
         # Build outside the lock — this is the expensive step.
-        new_slot = _build_slot(self._dim, chunks, embeddings)
+        new_slot = _build_slot(self._dim, chunks, embeddings, snapshot_id or _new_snapshot_id())
 
         with self._lock:
             inactive = 1 - self._active
@@ -267,6 +316,7 @@ class FAISSStore(VectorStore):
         """
         with self._lock:
             slot = self._slot
+            snapshot_id = slot.snapshot_id
             fids = sorted(slot.chunks)
             chunks = [slot.chunks[fid] for fid in fids]
             if fids:
@@ -278,7 +328,12 @@ class FAISSStore(VectorStore):
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_name(path.name + ".tmp")
         with tmp.open("wb") as fh:
-            np.savez(fh, vectors=vecs, chunks_json=np.array(chunks_json))
+            np.savez(
+                fh,
+                vectors=vecs,
+                chunks_json=np.array(chunks_json),
+                snapshot_id=np.array(snapshot_id),
+            )
         os.replace(tmp, path)
 
     def load(self, path: Path) -> bool:
@@ -292,6 +347,9 @@ class FAISSStore(VectorStore):
         with np.load(path, allow_pickle=False) as data:
             vecs = np.asarray(data["vectors"], dtype=np.float32)
             raw = json.loads(str(data["chunks_json"]))
+            # Bundles written before snapshot IDs existed get a fixed legacy ID,
+            # so every replica loading the same file still agrees on it.
+            snapshot_id = str(data["snapshot_id"]) if "snapshot_id" in data else "legacy"
         chunks = [Chunk.model_validate(obj) for obj in raw]
-        self.swap_index(chunks, vecs)
+        self.swap_index(chunks, vecs, snapshot_id=snapshot_id)
         return True

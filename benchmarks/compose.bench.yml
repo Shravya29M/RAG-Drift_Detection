@@ -1,0 +1,19 @@
+# Benchmark override: keyless generation (no LLM calls or cost), no demo seeding,
+# W&B off, and the cache switchable per run.
+#   INDEX_DIR=./benchmarks/corpus/index docker compose \
+#     -f docker-compose.yml -f benchmarks/compose.bench.yml up -d
+x-bench-env: &bench-env
+  OPENAI_API_KEY: ""
+  GROQ_API_KEY: ""
+  ANTHROPIC_API_KEY: ""
+  WANDB_DISABLED: "true"
+  SEED_SAMPLE_DATA: "false"
+  QUERY_CACHE_ENABLED: ${QUERY_CACHE_ENABLED:-true}
+
+services:
+  api1:
+    environment: *bench-env
+  api2:
+    environment: *bench-env
+  api3:
+    environment: *bench-env

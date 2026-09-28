@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
@@ -19,6 +20,19 @@ class Encoder(ABC):
     @abstractmethod
     def dim(self) -> int:
         """Dimensionality of the vectors produced by :meth:`encode`."""
+
+    @property
+    def tokenizer(self) -> Any | None:
+        """The model's tokenizer, used to size chunks in model tokens.
+
+        ``None`` (the default) makes the chunker fall back to whitespace words.
+        """
+        return None
+
+    @property
+    def max_input_tokens(self) -> int | None:
+        """Content tokens the model embeds before truncating (specials excluded)."""
+        return None
 
     @abstractmethod
     def encode(self, texts: list[str]) -> np.ndarray:
@@ -54,6 +68,21 @@ class SentenceTransformerEncoder(Encoder):
     def dim(self) -> int:
         """Embedding dimensionality reported by the underlying model."""
         return int(self._model.get_sentence_embedding_dimension() or 0)
+
+    @property
+    def tokenizer(self) -> Any:
+        """The underlying Hugging Face tokenizer."""
+        return self._model.tokenizer
+
+    @property
+    def max_input_tokens(self) -> int:
+        """``max_seq_length`` minus [CLS]/[SEP]: 254 for all-MiniLM-L6-v2.
+
+        Deliberately not ``tokenizer.model_max_length`` — for this model that
+        reports 512 while the model itself truncates at 256.
+        """
+        specials = int(self._model.tokenizer.num_special_tokens_to_add(pair=False))
+        return int(self._model.max_seq_length) - specials
 
     def encode(self, texts: list[str]) -> np.ndarray:
         """Encode *texts* and return L2-normalised embeddings.

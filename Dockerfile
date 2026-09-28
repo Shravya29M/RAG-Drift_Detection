@@ -19,7 +19,9 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Install dependencies first (layer is cached as long as requirements.txt unchanged).
 COPY requirements.txt .
+# CPU-only torch first: the default wheel pulls CUDA libraries this image never uses.
 RUN pip install --upgrade pip \
+ && pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
  && pip install --no-cache-dir -r requirements.txt
 
 # ---- runtime ----------------------------------------------------------------

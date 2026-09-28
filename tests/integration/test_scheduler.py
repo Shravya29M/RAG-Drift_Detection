@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import numpy as np
 
 from rag.drift.alarm import DriftAlarm
-from rag.drift.detector import DriftDetector
+from rag.drift.detector import DriftDetector, WindowOutcome
 from rag.drift.scheduler import DriftScheduler
 from rag.models import DriftConfig, DriftResult
 
@@ -43,16 +43,28 @@ def _vec() -> np.ndarray:
 
 
 def _mock_detector(return_val: DriftResult | None = None) -> DriftDetector:
-    """Return a DriftDetector mock with add_query_embedding pre-wired.
+    """Return a DriftDetector mock with add_query_embeddings pre-wired.
 
-    We use a plain MagicMock (no spec) so that mypy doesn't enforce the real
-    property types; the scheduler only calls add_query_embedding and reads
-    reindex_triggered, both of which we set explicitly.
+    Each embedding in a batch "completes a window" returning *return_val*
+    (or nothing when it is ``None``); the outcome carries the mock's current
+    ``reindex_triggered``. A plain MagicMock (no spec) keeps mypy from
+    enforcing the real property types.
     """
     det = MagicMock()
-    det.add_query_embedding.return_value = return_val
     det.reindex_triggered = False
+
+    def _add(batch: list[tuple[np.ndarray, float | None]]) -> list[WindowOutcome]:
+        if return_val is None:
+            return []
+        return [WindowOutcome(return_val, det.reindex_triggered) for _ in batch]
+
+    det.add_query_embeddings.side_effect = _add
     return cast(DriftDetector, det)
+
+
+def _embeddings_seen(detector: DriftDetector) -> int:
+    calls = cast(MagicMock, detector).add_query_embeddings.call_args_list
+    return sum(len(call.args[0]) for call in calls)
 
 
 def _mock_alarm() -> DriftAlarm:
@@ -126,7 +138,8 @@ class TestTickLogic:
         for _ in range(3):
             sched.enqueue_embedding(_vec())
         sched._tick()
-        assert cast(MagicMock, detector).add_query_embedding.call_count == 3
+        assert _embeddings_seen(detector) == 3
+        assert cast(MagicMock, detector).add_query_embeddings.call_count == 1
 
     def test_tick_no_alarm_when_detector_returns_none(self) -> None:
         detector = _mock_detector(return_val=None)
@@ -164,7 +177,7 @@ class TestTickLogic:
         detector = _mock_detector(return_val=None)
         sched = DriftScheduler(detector, _mock_alarm(), _cfg(), drift_check_interval_s=60.0)
         sched._tick()  # no embeddings queued
-        cast(MagicMock, detector).add_query_embedding.assert_not_called()
+        cast(MagicMock, detector).add_query_embeddings.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -194,4 +207,4 @@ class TestSchedulerRunsForTwoSeconds:
 
         # All embeddings must have been processed
         assert sched.queue_size == 0
-        assert cast(MagicMock, detector).add_query_embedding.call_count == n_embeddings
+        assert _embeddings_seen(detector) == n_embeddings

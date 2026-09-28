@@ -12,9 +12,21 @@ concurrency:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     env:
       WANDB_DISABLED: "true"
       OMP_NUM_THREADS: "1"
+      # Enables tests/integration/test_redis_live.py (skipped without it).
+      REDIS_URL: redis://localhost:6379/0
     steps:
       - uses: actions/checkout@v4
 
@@ -27,7 +39,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-          pip install ruff mypy pytest pytest-cov
+          pip install ruff mypy pytest pytest-cov "fakeredis[lua]>=2.26"
 
       - name: Lint (ruff)
         run: |

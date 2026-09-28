@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -93,3 +94,13 @@ class VectorStore(ABC):
             List of :class:`~rag.models.Chunk` objects in unspecified order.
             Empty list if the store has no chunks.
         """
+
+    def content_fingerprint(self) -> str:
+        """Cheap identity of the current index contents.
+
+        The default hashes the sorted chunk IDs. Backends that can do better
+        (e.g. track a snapshot ID that changes on every mutation) override it.
+        Used to derive the shared index version for cache keys and replica sync.
+        """
+        ids = sorted(c.id for c in self.list_chunks())
+        return hashlib.sha256("\n".join(ids).encode()).hexdigest()

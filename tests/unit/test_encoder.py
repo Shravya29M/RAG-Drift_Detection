@@ -173,3 +173,31 @@ class TestSentenceTransformerEncoder:
             MockST.return_value.encode.return_value = np.array([[1.0, 0.0]])
             SentenceTransformerEncoder("my-model")
             MockST.assert_called_once_with("my-model")
+
+
+# ---------------------------------------------------------------------------
+# Tokenizer exposure (drives token-sized chunking)
+# ---------------------------------------------------------------------------
+
+
+class TestTokenizerExposure:
+    def test_base_encoder_has_no_tokenizer(self) -> None:
+        class _Bare(Encoder):
+            @property
+            def dim(self) -> int:
+                return 2
+
+            def encode(self, texts: list[str]) -> np.ndarray:
+                return np.zeros((len(texts), 2), dtype=np.float32)
+
+        bare = _Bare()
+        assert bare.tokenizer is None
+        assert bare.max_input_tokens is None
+
+    def test_limit_is_max_seq_length_minus_special_tokens(self, mock_st: MagicMock) -> None:
+        mock_st.max_seq_length = 256
+        mock_st.tokenizer.num_special_tokens_to_add.return_value = 2
+        mock_st.tokenizer.model_max_length = 512  # must NOT be used
+        enc = _make_encoder(mock_st)
+        assert enc.max_input_tokens == 254
+        assert enc.tokenizer is mock_st.tokenizer

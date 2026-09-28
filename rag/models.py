@@ -74,13 +74,16 @@ class IngestConfig(BaseModel):
     """
 
     chunk_size: PositiveInt = Field(
-        default=512,
-        description="Maximum number of tokens per chunk.",
+        default=200,
+        description=(
+            "Maximum embedding-model tokens per chunk. Must fit the model's input "
+            "limit (254 content tokens for all-MiniLM-L6-v2)."
+        ),
     )
     chunk_overlap: int = Field(
-        default=64,
+        default=30,
         ge=0,
-        description="Number of tokens shared between consecutive chunks.",
+        description="Tokens (whole words) shared between consecutive chunks.",
     )
     source_type: SourceType | None = Field(
         default=None,
@@ -128,6 +131,18 @@ class RetrievalResult(BaseModel):
     total_candidates: int = Field(
         ge=0,
         description="Raw search result count before metadata filtering.",
+    )
+    cache_hit: bool = Field(
+        default=False,
+        description="True when the result was served from the shared query cache.",
+    )
+    query_embedding: list[float] | None = Field(
+        default=None,
+        exclude=True,
+        description=(
+            "The query's embedding, returned so callers (the drift monitor) never "
+            "re-encode the query. Excluded from serialisation."
+        ),
     )
 
 
@@ -239,6 +254,53 @@ class AlarmConfig(BaseModel):
             "Minimum seconds between new AUTO remediation incidents after a prior incident "
             "has been resolved. Open incidents are always deduplicated."
         ),
+    )
+
+
+class RedisConfig(BaseModel):
+    """Connection settings for the shared Redis instance.
+
+    Redis backs the query cache, the shared drift state, remediation incidents
+    and cross-replica index sync. An empty ``url`` disables all of them and the
+    service runs as a single self-contained process.
+    """
+
+    url: str = Field(
+        default="",
+        description="redis:// URL; overridden by env REDIS_URL. Empty disables Redis.",
+    )
+    socket_timeout_s: float = Field(
+        default=0.5,
+        gt=0.0,
+        description="Per-command timeout; a slow Redis degrades to local mode, never blocks.",
+    )
+    retry_interval_s: float = Field(
+        default=5.0,
+        gt=0.0,
+        description="Minimum seconds between reconnection probes while Redis is down.",
+    )
+    index_poll_interval_s: float = Field(
+        default=5.0,
+        gt=0.0,
+        description="How often a replica compares its index version with the shared one.",
+    )
+    drift_state_ttl_s: float = Field(
+        default=7 * 24 * 3600.0,
+        gt=0.0,
+        description="Idle expiry for shared drift state (refreshed on every write).",
+    )
+
+
+class CacheConfig(BaseModel):
+    """Configuration for the shared query cache."""
+
+    enabled: bool = Field(
+        default=True,
+        description="Cache query embeddings + top-k results; env QUERY_CACHE_ENABLED overrides.",
+    )
+    ttl_s: PositiveInt = Field(
+        default=3600,
+        description="Seconds before a cached retrieval expires.",
     )
 
 

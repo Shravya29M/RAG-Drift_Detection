@@ -12,10 +12,12 @@ from pydantic import BaseModel, Field
 
 from rag.models import (
     AlarmConfig,
+    CacheConfig,
     DriftConfig,
     EmbeddingConfig,
     GenerationConfig,
     IngestConfig,
+    RedisConfig,
     SchedulerConfig,
     VectorStoreConfig,
 )
@@ -33,6 +35,8 @@ class Settings(BaseModel):
     drift: DriftConfig = Field(default_factory=DriftConfig)
     scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
     alarm: AlarmConfig = Field(default_factory=AlarmConfig)
+    redis: RedisConfig = Field(default_factory=RedisConfig)
+    cache: CacheConfig = Field(default_factory=CacheConfig)
 
 
 def _build(model_cls: type[_M], block: object) -> _M:
@@ -50,7 +54,8 @@ def load_settings(config_path: Path | None = None) -> Settings:
     never overwritten).  Missing config file falls back to model defaults.
 
     Env overrides: ``QDRANT_URL`` → ``vector_store.qdrant_url``,
-    ``DRIFT_WEBHOOK_URL`` → ``alarm.webhook_url``.
+    ``DRIFT_WEBHOOK_URL`` → ``alarm.webhook_url``, ``REDIS_URL`` → ``redis.url``,
+    ``QUERY_CACHE_ENABLED`` → ``cache.enabled`` (``false``/``0``/``no`` disable).
     """
     load_dotenv()
 
@@ -69,6 +74,8 @@ def load_settings(config_path: Path | None = None) -> Settings:
         drift=_build(DriftConfig, raw.get("drift")),
         scheduler=_build(SchedulerConfig, raw.get("scheduler")),
         alarm=_build(AlarmConfig, raw.get("alarm")),
+        redis=_build(RedisConfig, raw.get("redis")),
+        cache=_build(CacheConfig, raw.get("cache")),
     )
 
     qdrant_url = os.environ.get("QDRANT_URL")
@@ -77,5 +84,11 @@ def load_settings(config_path: Path | None = None) -> Settings:
     webhook_url = os.environ.get("DRIFT_WEBHOOK_URL")
     if webhook_url:
         settings.alarm.webhook_url = webhook_url
+    redis_url = os.environ.get("REDIS_URL")
+    if redis_url:
+        settings.redis.url = redis_url
+    cache_enabled = os.environ.get("QUERY_CACHE_ENABLED")
+    if cache_enabled:
+        settings.cache.enabled = cache_enabled.strip().lower() not in {"false", "0", "no"}
 
     return settings
